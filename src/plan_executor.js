@@ -1,5 +1,6 @@
 import { AmpAgentRunner } from './agent_runner.js'
 import { agentMessageToUpdate, agentThreadID, parseAgentLine } from './agents.js'
+import { UserError } from './cli.js'
 import { AgentUpdateFormatter } from './formatters/agent_updates.js'
 import { spawn } from './spawn.js'
 import { PersistentStateStore } from './state_store.js'
@@ -12,10 +13,12 @@ export class PlanExecutor {
 		agentRunner = new AmpAgentRunner(),
 		formatter = new AgentUpdateFormatter(),
 		stateStore = new PersistentStateStore(),
+		shell = process.env.SHELL ?? '/bin/sh',
 	} = {}) {
 		this.agentRunner = agentRunner
 		this.formatter = formatter
 		this.stateStore = stateStore
+		this.shell = shell
 	}
 
 	async execute(plan) {
@@ -29,16 +32,56 @@ export class PlanExecutor {
 		}
 
 		await this.saveState(state)
-		await this.runState(state)
+		await this.drive(state)
+	}
+
+	/**
+	 * Resumes a stopped or interrupted plan from its last persisted checkpoint.
+	 *
+	 * Because progress is only checkpointed after a step completes, resume re-runs
+	 * the step that was in flight when the plan stopped. Steps are carried out by an
+	 * agent that reconciles any half-applied work, so re-running is safe.
+	 *
+	 * @example
+	 * await new PlanExecutor().resume('a1b2c3d4')
+	 */
+	async resume(id) {
+		const state = await this.stateStore.get(`plan/${id}`)
+
+		if (state === undefined) {
+			throw new UserError(`Unknown plan: ${id}`)
+		}
+
+		if (state.status === 'completed') {
+			console.log(`Plan ${id} is already complete`)
+			return
+		}
+
+		state.status = 'running'
+		await this.drive(state)
+	}
+
+	async drive(state) {
+		try {
+			await this.runState(state)
+		} catch (error) {
+			if (error instanceof UserError) {
+				throw new UserError(`${error.message}\n\nResume with: kit plan resume ${state.id}`)
+			}
+
+			throw error
+		}
 	}
 
 	async runState(state) {
-		for (let index = state.currentStepIndex; index < state.steps.length; index++) {
-			const step = state.steps[index]
-			state.currentStepIndex = index
-			await this.saveState(state)
+		while (state.currentStepIndex < state.steps.length) {
+			const index = state.currentStepIndex
+			await this.runStep(state.steps[index], state)
 
-			await this.runStep(step, state)
+			// Checkpoint only after the step completes; an interrupted step is
+			// re-run on resume rather than skipped.
+			state.currentStepIndex = index + 1
+			await this.saveState(state)
 		}
 
 		state.status = 'completed'
@@ -67,14 +110,13 @@ export class PlanExecutor {
 			}
 
 			state.lastOutput = `Verification failed with code ${verification.code}: ${verification.output}`
-			await this.saveState(state)
 
 			if (step.agent === undefined) {
 				break
 			}
 		}
 
-		throw new Error(`Verification failed: ${step.verifyWithCommand}`)
+		throw verificationFailure(step)
 	}
 
 	async runAgentStep(step, state) {
@@ -89,8 +131,21 @@ export class PlanExecutor {
 						cwd: process.cwd(),
 					})
 
+		let exitCode = 0
+		const stderr = []
+
 		for await (const event of events) {
 			const value = event.toJSON()
+
+			if (value.type === 'command.exited') {
+				exitCode = value.code
+				continue
+			}
+
+			if (value.type === 'command.output' && value.stream === 'stderr') {
+				stderr.push(value.bytes)
+				continue
+			}
 
 			if (value.type !== 'command.output' || value.stream !== 'stdout') {
 				continue
@@ -116,6 +171,10 @@ export class PlanExecutor {
 			}
 		}
 
+		if (exitCode !== 0) {
+			throw agentFailure(step, exitCode, new TextDecoder().decode(join(stderr)).trim())
+		}
+
 		return lastOutput
 	}
 
@@ -123,7 +182,7 @@ export class PlanExecutor {
 		const chunks = []
 		let code = 0
 
-		for await (const event of spawn(step.verifyWithCommand.split(' '))) {
+		for await (const event of spawn([this.shell, '-c', step.verifyWithCommand])) {
 			const value = event.toJSON()
 
 			if (value.type === 'command.output') {
@@ -154,6 +213,26 @@ function join(chunks) {
 	}
 
 	return bytes
+}
+
+function verificationFailure(step) {
+	const parts = []
+
+	if (step.instructions !== undefined) {
+		parts.push(step.instructions)
+	}
+
+	parts.push(`Verification failed: ${step.verifyWithCommand}`)
+	return new UserError(parts.join('\n\n'))
+}
+
+function agentFailure(step, exitCode, stderr) {
+	const label = step.id ?? '(unnamed)'
+	const detail = stderr === '' ? '' : `\n${stderr}`
+
+	return new UserError(
+		`Agent step ${label} failed with exit code ${exitCode}.${detail}\n\nIf the agent is not authenticated, log in and resume.`,
+	)
 }
 
 function agentPrompt(step, state) {

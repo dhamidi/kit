@@ -1,5 +1,6 @@
 import { defineCommand, UserError } from '../cli.js'
 import { TableFormatter } from '../formatters/table.js'
+import { PlanExecutor } from '../plan_executor.js'
 import { PersistentStateStore } from '../state_store.js'
 
 /**
@@ -120,6 +121,23 @@ plan.command(
 			}
 
 			cli.formatter.planShow(state)
+		},
+	}),
+)
+
+plan.command(
+	defineCommand({
+		name: 'resume',
+		description: 'Resume a stopped or interrupted plan by id',
+		async run({ parsed }) {
+			const id = parsed.positionals[0]
+
+			if (id === undefined) {
+				const keys = await cachedPlanKeys(new PersistentStateStore())
+				throw new UserError(`Usage: kit plan resume <id>\n\nCached plans:\n${cachedPlans(keys)}`)
+			}
+
+			await new PlanExecutor().resume(id)
 		},
 	}),
 )
