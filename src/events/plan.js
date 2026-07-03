@@ -54,6 +54,8 @@ function parseStep(step) {
 
 	return {
 		...step,
-		files: step.files.map((file) => FileURI.fromPath(file).toString()),
+		files: step.files
+			.filter((file) => file !== undefined && file !== null)
+			.map((file) => FileURI.fromPath(file).toString()),
 	}
 }
