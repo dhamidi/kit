@@ -165,6 +165,8 @@ function welcomeMessage(id, ctx) {
 		'  name                      method name',
 		'  signature()               method name and parameter names',
 		'  parameterNames()          parameter names parsed from source',
+		'  doc()                     documentation string when one is registered',
+		'  documentation()           alias for doc()',
 		'  source()                  JavaScript source from Function#toString()',
 		'  function                  original function object',
 		'  owner                     object where the method was discovered',

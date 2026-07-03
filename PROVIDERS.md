@@ -55,7 +55,10 @@ Component objects should implement `provider()`, `id()`, `description()`, and
 
 - Use `kit.FileURI` for paths. Do not splice paths with string operations.
 - Use `kit.Identifier` for hierarchical ids. Do not split ids on `.` by hand.
-- Use `kit.spawn()` for external commands so process IO stays observable.
+- Use `env.spawn()` / `env.exec()` for generation-time commands so dry-run mode
+  can report the command without running it. Use `kit.spawn()` only for
+  read-only discovery commands that should run outside `create()` dry-run
+  semantics.
 - Use `kit.Type` schemas with `description`; help text is generated from schema
   descriptions.
 
@@ -65,7 +68,11 @@ Generation should be deterministic first, with optional follow-up plans for LLM
 work.
 
 - Call `env.createFile()` / `env.editFile()` and yield the event they return.
-- Do not perform file writes directly inside providers.
+- Use `env.readFile()` for generation reads and `env.spawn()` for side-effecting
+  generation commands. Do not perform file writes or side-effecting process
+  spawns directly inside providers.
+- Check `env.dryRun` only when generation must choose a different deterministic
+  path; do not infer dry-run from method arity.
 - If `spec.intent` is present, yield a `kit.Event.plan(...)` describing the
   follow-up implementation work.
 - Keep plan wording generic and specific to the generated component, not copied
@@ -73,6 +80,10 @@ work.
 
 ```js
 yield await env.createFile(file, source)
+
+for await (const event of env.spawn(['new-migration.sh', name])) {
+	yield event
+}
 
 if (spec.intent !== undefined) {
 	yield kit.Event.plan(`Implement ${name}`, [{

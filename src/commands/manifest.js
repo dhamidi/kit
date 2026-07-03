@@ -1,4 +1,5 @@
 import { defineCommand, UserError } from '../cli.js'
+import { createFileEnv } from '../file_env.js'
 import { FileURI } from '../file_uri.js'
 import { ManifestResolver, ManifestVocabulary } from '../manifest/resolver.js'
 import { ManifestRunner, ManifestRunnerError } from '../manifest/runner.js'
@@ -84,7 +85,7 @@ manifest.command(defineCommand({
 	description: 'Apply a manifest by invoking providers sequentially',
 	options: {
 		json: { type: 'boolean', description: 'Print provider events as JSON lines' },
-		'run-plans': { type: 'boolean', description: 'Execute provider follow-up plans' },
+		'skip-plans': { type: 'boolean', description: 'Skip provider follow-up plans (executed by default)' },
 	},
 	async run({ parsed }) {
 		const execution = await ManifestExecution.from(parsed)
@@ -109,7 +110,7 @@ class ManifestExecution {
 			resolved,
 			json: parsed.values.json,
 			path,
-			runPlans: parsed.values['run-plans'] === true,
+			runPlans: parsed.values['skip-plans'] !== true,
 		})
 	}
 
@@ -132,7 +133,7 @@ class ManifestExecution {
 	}
 
 	async plan() {
-		return this.run({ env: createDryRunEnv(), executePlans: false, dryRun: true })
+		return this.run({ env: createFileEnv({ dryRun: true }), executePlans: false, dryRun: true })
 	}
 
 	async apply() {
@@ -147,7 +148,7 @@ class ManifestExecution {
 		try {
 			const result = await new ManifestRunner({
 				providers: this.providers,
-				env: createDryRunEnv(),
+				env: createFileEnv({ dryRun: true }),
 				executePlans: false,
 			}).validate(this.resolved.operations)
 
@@ -328,17 +329,6 @@ function vocabularyEntryJSON(entry) {
 	}
 }
 
-function createDryRunEnv() {
-	return {
-		async createFile(path) {
-			return { toJSON: () => ({ type: 'file.created', path: FileURI.fromPath(path).toString() }) }
-		},
-		async editFile(path) {
-			return { toJSON: () => ({ type: 'file.edited', path: FileURI.fromPath(path).toString() }) }
-		},
-	}
-}
-
 function formatEvent(value, { dryRun }) {
 	if (value.type === 'file.created') {
 		return `${dryRun ? 'Would create' : 'Created'} ${FileURI.fromPath(value.path).path()}`
@@ -346,6 +336,18 @@ function formatEvent(value, { dryRun }) {
 
 	if (value.type === 'file.edited') {
 		return `${dryRun ? 'Would edit' : 'Edited'} ${FileURI.fromPath(value.path).path()}`
+	}
+
+	if (value.type === 'command.spawned') {
+		return `${dryRun ? 'Would run' : 'Running'} ${value.command.join(' ')}`
+	}
+
+	if (value.type === 'command.exited') {
+		return dryRun ? undefined : `Exited ${value.command.join(' ')} with code ${value.code}`
+	}
+
+	if (value.type === 'command.output') {
+		return undefined
 	}
 
 	if (value.type === 'plan') {

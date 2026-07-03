@@ -8,7 +8,9 @@ of guessing helper shapes or importing internals.
 
 Added to objects via `Introspectable.includeInObject` and to classes via
 `Introspectable.includeIn` (implemented in `src/introspectable.js` in a Kit
-checkout).
+checkout). When an introspectable object has class-valued properties, those
+classes are made introspectable too, so `kit.AmpAgentRunner.instanceMethods()`
+works without separately registering the class.
 
 On any introspectable **object** (like `kit` or `env`):
 ```js
@@ -32,9 +34,28 @@ A `Method` exposes:
 m.name             // 'spawn'
 m.signature()      // 'spawn(command, options)'
 m.parameterNames() // ['command', 'options']
+m.doc()            // registered doc string, or ''
+m.documentation()  // alias for doc()
 m.source()         // full Function#toString()
 m.function         // the original function
 m.owner            // object/prototype where it was found
+```
+
+Register docs explicitly; runtime `Function#toString()` does not reliably keep
+leading JSDoc comments after Bun loads or compiles modules. The metadata is
+stored on the function being documented, not in a side registry:
+
+```js
+kit.Introspectable.document(MyClass, {
+	instance: { create: 'Creates a component and yields file/plan events.' },
+	static: { from: 'Parses a value into a MyClass instance.' },
+})
+
+kit.Introspectable.document(myObject, {
+	run: 'Runs the object.'
+})
+
+myObject.run[kit.Introspectable.docSymbol] // 'Runs the object.'
 ```
 
 ## The REPL
@@ -94,6 +115,13 @@ uri.relativeTo(base)                        // relative path string (throws if n
 uri.withExtension('.json') / uri.withoutExtension('.json')
 ```
 
+`kit.repoRoot()` also returns a `FileURI`, not a string:
+
+```js
+const root = await kit.repoRoot()
+const providerDir = root.join('providers').path()
+```
+
 ### `kit.Identifier` — hierarchical component id
 Use instead of splitting ids on `.` by hand (e.g. `kit-event.file.fileRead`).
 `kit.Identifier.fromString(id)`, `id.parts()`.
@@ -116,7 +144,28 @@ boundary; always attach `description` (and `examples`).
 
 ### `kit.spawn(command, options)`
 Runs subprocesses as an event stream (`command.spawned/output/exited`) so
-process IO stays observable. Use this in providers, not `Bun.spawn` directly.
+process IO stays observable. Use this for read-only discovery commands and Kit
+internals that should always execute. Inside provider `create()` methods, prefer
+`env.spawn()` / `env.exec()` so `kit generate -n` and `kit manifest plan` can
+report the command without running it.
+
+### `env` — generation environment
+`env` is passed to provider `create(spec, env)` methods. It is introspectable,
+has a `dryRun` boolean, and exposes:
+
+```js
+env.dryRun                         // true for generate -n / manifest plan
+await env.createFile(path, source) // returns file.created; no write in dry-run
+await env.editFile(path, edit)     // returns file.edited; no write in dry-run
+await env.readFile(path)           // generation read through FileURI handling
+for await (const event of env.spawn(['cmd'])) yield event
+const result = await env.exec(['cmd']) // { code, stdout, stderr, events }
+```
+
+Use `env.spawn()` for generation-time side effects. In dry-run mode it yields
+`command.spawned` and a successful `command.exited` event without launching the
+process. Use `env.exec()` when you need collected stdout/stderr; yield
+`result.events` if callers should see the command events.
 
 ### `kit.parseArgs(config)` / `kit.parseArgsOptionsFromSchema(schema)`
 `parseArgsOptionsFromSchema` turns a TypeBox object schema into `node:util`
@@ -136,7 +185,7 @@ input. (CLI argument parse errors are already converted to `UserError` by
 ### Other useful exports
 `kit.discoverProviders()`, `kit.discoverComponents()`,
 `kit.discoverComponentRecords()`, `kit.inspectComponent()`,
-`kit.loadProvider(path)`, `kit.repoRoot()`, `kit.PlanExecutor`,
+`kit.loadProvider(path)`, `kit.repoRoot()` (returns `FileURI`), `kit.PlanExecutor`,
 `kit.ManifestResolver`, `kit.ManifestRunner`, `kit.ManifestVocabulary`,
 `kit.parseManifest`, `kit.TableFormatter`, `kit.PlanFormatter`,
 `kit.EphemeralStateStore`, `kit.PersistentStateStore`.

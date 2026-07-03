@@ -8,12 +8,16 @@
  * kit.method('spawn').source()
  */
 export const Introspectable = {
+	docSymbol: Symbol.for('kit.introspectable.docs'),
+
 	Method: class {
+		#doc
 		#fn
 		#owner
 
-		constructor({ name, fn, owner }) {
+		constructor({ name, fn, owner, doc }) {
 			this.name = name
+			this.#doc = doc
 			this.#fn = fn
 			this.#owner = owner
 		}
@@ -32,6 +36,14 @@ export const Introspectable = {
 
 		parameterNames() {
 			return parameterNamesFrom(this.#fn)
+		}
+
+		doc() {
+			return this.#doc ?? ''
+		}
+
+		documentation() {
+			return this.doc()
 		}
 
 		source() {
@@ -57,7 +69,7 @@ export const Introspectable = {
 				configurable: true,
 				value(options = {}) {
 					return methodsFrom(this.prototype, {
-						stopAt: Object.prototype,
+						stopAt: instanceStopFor(this),
 						includeInherited: options.includeInherited ?? true,
 						exclude: helperNamesWith('constructor'),
 					})
@@ -68,7 +80,7 @@ export const Introspectable = {
 				configurable: true,
 				value(options = {}) {
 					return methodsFrom(this, {
-						stopAt: Function.prototype,
+						stopAt: staticStopFor(this),
 						includeInherited: options.includeInherited ?? true,
 						exclude: helperNamesWith('length', 'name', 'prototype'),
 					})
@@ -90,7 +102,27 @@ export const Introspectable = {
 		return klass
 	},
 
+	document(value, docs) {
+		if (typeof docs === 'string') {
+			documentFunction(value, docs)
+			return value
+		}
+
+		if (isClass(value)) {
+			documentMethods(value.prototype, docs?.instance)
+			documentMethods(value, docs?.static)
+			return value
+		}
+
+		documentMethods(value, docs?.methods)
+		documentMethods(value, docs)
+
+		return value
+	},
+
 	includeInObject(object) {
+		this.includeClassValuesIn(object)
+
 		Object.defineProperties(object, {
 			method: {
 				configurable: true,
@@ -121,6 +153,14 @@ export const Introspectable = {
 		})
 
 		return object
+	},
+
+	includeClassValuesIn(object) {
+		for (const value of Object.values(object)) {
+			if (isClass(value)) {
+				this.includeIn(value)
+			}
+		}
 	},
 
 	methodOf(value, name, options = {}) {
@@ -154,6 +194,7 @@ function methodsFrom(start, { stopAt, includeInherited, exclude }) {
 						name,
 						fn: descriptor.value,
 						owner: cursor,
+						doc: docFor(cursor, name, descriptor.value),
 					}),
 				)
 				seen.add(name)
@@ -172,6 +213,80 @@ function methodsFrom(start, { stopAt, includeInherited, exclude }) {
 
 function helperNamesWith(...names) {
 	return new Set(['method', 'methods', 'respondsTo', 'instanceMethods', 'staticMethods', ...names])
+}
+
+function isClass(value) {
+	return typeof value === 'function' && /^class\s/.test(Function.prototype.toString.call(value))
+}
+
+function instanceStopFor(klass) {
+	return klass.prototype instanceof Error ? Error.prototype : Object.prototype
+}
+
+function staticStopFor(klass) {
+	return klass.prototype instanceof Error ? Error : Function.prototype
+}
+
+function docFor(owner, name, fn) {
+	return functionDoc(fn) ?? ownerDoc(owner, name)
+}
+
+function documentMethods(owner, docs) {
+	if (docs === undefined) {
+		return
+	}
+
+	for (const [name, doc] of Object.entries(docs)) {
+		if (typeof doc === 'string') {
+			documentFunction(owner?.[name], doc)
+		}
+	}
+}
+
+function documentFunction(value, doc) {
+	if (typeof value !== 'function') {
+		return
+	}
+
+	Object.defineProperty(value, Introspectable.docSymbol, {
+		configurable: true,
+		value: doc,
+	})
+}
+
+function functionDoc(fn) {
+	const docs = docsOf(fn)
+
+	if (typeof docs === 'string') {
+		return docs
+	}
+
+	return undefined
+}
+
+function ownerDoc(owner, name) {
+	const docs = docsOf(owner)
+	const direct = docAt(docs, name) ?? docAt(docs?.methods, name)
+
+	if (direct !== undefined) {
+		return direct
+	}
+
+	if (typeof owner === 'function') {
+		return docAt(docs?.static, name)
+	}
+
+	const classDocs = docsOf(owner?.constructor)
+	return docAt(classDocs?.instance, name) ?? docAt(classDocs, name)
+}
+
+function docAt(docs, name) {
+	const value = docs?.[name]
+	return typeof value === 'string' ? value : undefined
+}
+
+function docsOf(value) {
+	return value?.[Introspectable.docSymbol]
 }
 
 function parameterNamesFrom(fn) {

@@ -2,6 +2,7 @@ import { Type } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
+import { createFileEnv } from '../file_env.js'
 import { kit } from '../index.js'
 
 /**
@@ -60,7 +61,7 @@ export default defineCommand({
 
 		assertValidSpec(match.candidate.provider, match.candidate.type, spec)
 
-		const env = dryRun ? createDryRunEnv() : kit.createFileEnv()
+		const env = createFileEnv({ dryRun })
 
 		for await (const event of match.candidate.type.create(spec, env)) {
 			const value = event.toJSON()
@@ -148,17 +149,6 @@ function commonFieldsSchema(schema) {
 	}
 }
 
-function createDryRunEnv() {
-	return kit.Introspectable.includeInObject({
-		async createFile(path) {
-			return kit.Event.fileCreated(path)
-		},
-		async editFile(path) {
-			return kit.Event.fileEdited(path)
-		},
-	})
-}
-
 function writeEvent(value, { dryRun, json }) {
 	if (json) {
 		console.log(JSON.stringify(value))
@@ -172,6 +162,23 @@ function writeEvent(value, { dryRun, json }) {
 
 	if (value.type === 'file.created') {
 		console.log(`${dryRun ? 'Would create' : 'Created'} ${kit.FileURI.fromPath(value.path).path()}`)
+		return
+	}
+
+	if (value.type === 'command.spawned') {
+		console.log(`${dryRun ? 'Would run' : 'Running'} ${value.command.join(' ')}`)
+		return
+	}
+
+	if (value.type === 'command.exited') {
+		if (!dryRun) {
+			console.log(`Exited ${value.command.join(' ')} with code ${value.code}`)
+		}
+
+		return
+	}
+
+	if (value.type === 'command.output') {
 		return
 	}
 

@@ -1,6 +1,4 @@
-import { Event } from '../event.js'
-import { FileURI } from '../file_uri.js'
-import { Introspectable } from '../introspectable.js'
+import { createFileEnv } from '../file_env.js'
 import { PlanExecutor } from '../plan_executor.js'
 import { ManifestOperations, ProviderRegistry } from './operation.js'
 
@@ -92,20 +90,4 @@ class IgnoringPlanEventHandler {
 	 * Keeps dry-run callers on the same event path without running follow-up plans.
 	 */
 	async handle() {}
-}
-
-function createFileEnv() {
-	return Introspectable.includeInObject({
-		async createFile(path, content) {
-			await Bun.write(FileURI.fromPath(path).path(), content)
-			return Event.fileCreated(path)
-		},
-		async editFile(path, edit) {
-			const file = FileURI.fromPath(path).path()
-			const source = await Bun.file(file).text()
-			const next = typeof edit === 'function' ? edit(source) : source
-			await Bun.write(file, next)
-			return Event.fileEdited(path)
-		},
-	})
 }

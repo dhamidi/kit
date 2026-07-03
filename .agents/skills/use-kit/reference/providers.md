@@ -89,13 +89,16 @@ one code path, two surfaces.
   `kit.methods()`, `kit.method(name).signature()`, `kit.method(name).source()`,
   `env.methods()`, `env.method(name).parameterNames()`.
 - **Values, not strings:** `kit.FileURI` for paths, `kit.Identifier` for ids,
-  `kit.spawn()` for subprocesses (keeps process IO observable), `kit.Type` for
-  schemas with `description`.
+  `env.spawn()` for generation-time subprocesses, `kit.spawn()` for read-only
+  discovery subprocesses that should always run, `kit.Type` for schemas with
+  `description`.
 - **Deterministic first, plan second.** Emit files deterministically; add ONE
   `kit.Event.plan(...)` for the LLM remainder. Keep plan wording specific to the
   generated component, not copied from another provider.
-- **Never write files directly.** Use `env.createFile()` / `env.editFile()` and
-  `yield` their events.
+- **Never write files directly or spawn generation side effects directly.** Use
+  `env.createFile()` / `env.editFile()` and `yield` their events; use
+  `env.spawn()` / `env.exec()` for generation commands so dry-run mode can skip
+  the side effect.
 - **Signal failures with `kit.UserError`, not plain `Error`.** If a type can't be
   created (or only lists existing components), throw `this.kit.UserError(...)`;
   Kit prints the message with no stack trace and exits non-zero. Argument parse
@@ -120,12 +123,19 @@ one code path, two surfaces.
 `env` (from `kit.createFileEnv()`) is what `create(spec, env)` writes through.
 It is introspectable and exposes:
 
+- `dryRun` → `true` during `kit generate -n` and `kit manifest plan`.
 - `createFile(path, content)` → writes the file, returns a `file.created` event.
 - `editFile(path, edit)` → reads the file, applies `edit(source) => nextSource`
   (a function) or leaves it unchanged, writes it, returns a `file.edited` event.
+- `readFile(path)` → reads a file through Kit's `FileURI` path handling.
+- `spawn(command, options)` → streams command events; dry-run yields
+  `command.spawned` / successful `command.exited` without running the command.
+- `exec(command, options)` → returns `{ code, stdout, stderr, events }`; use it
+  when generation needs collected command output.
 
 `kit manifest plan` and `kit generate -n` swap in a **dry-run env** that returns
-the same events without touching disk.
+the same file events without touching disk and command events without spawning
+processes. Do not sniff method arity to detect dry-run; read `env.dryRun`.
 
 ## Follow-up plans
 
