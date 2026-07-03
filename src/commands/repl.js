@@ -35,8 +35,10 @@ export default defineCommand({
 				return transcript(args)
 			case 'ls':
 				return listSessions()
+			case 'stop':
+				return stop()
 			default:
-				throw new UserError('usage: kit repl <new|do|transcript|ls> [session] [code]')
+				throw new UserError('usage: kit repl <new|do|transcript|ls|stop> [session] [code]')
 		}
 	},
 })
@@ -81,6 +83,20 @@ async function transcript(args) {
 async function listSessions() {
 	await ensureServer()
 	return sendReplExpression('repl.ls()')
+}
+
+async function stop() {
+	try {
+		await sendReplExpression('repl.stop()')
+	} catch {
+		return 'Kit REPL server is not running.'
+	}
+
+	try {
+		fs.rmSync(replSocketPath(), { force: true })
+	} catch {}
+
+	return 'Kit REPL server stopped.'
 }
 
 function currentSession() {

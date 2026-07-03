@@ -1,4 +1,4 @@
-import { defineCommand } from '../cli.js'
+import { defineCommand, UserError } from '../cli.js'
 import {
 	discoverComponentRecords,
 	discoverComponents,
@@ -54,13 +54,13 @@ components.command(
 			const componentName = parsed.positionals[0]
 
 			if (componentName === undefined) {
-				throw new Error('Usage: kit component show <component>')
+				throw new UserError('Usage: kit component show <component>')
 			}
 
 			const record = await inspectComponent(componentName)
 
 			if (record === undefined) {
-				throw new Error(`Unknown component: ${componentName}`)
+				throw new UserError(`Unknown component: ${componentName}`)
 			}
 
 			if (typeof record.provider.formatComponentShow === 'function') {

@@ -59,6 +59,13 @@ class KitProviderType {
 				description: 'Short user-facing description of the provider',
 				examples: ['Generate SvelteKit routes and remote functions'],
 			}),
+			project: Type.Optional(
+				Type.String({
+					description:
+						'Directory to generate the provider into; defaults to <repo-root>/providers',
+					examples: ['providers', '.kit/providers'],
+				}),
+			),
 		})
 	}
 
@@ -76,7 +83,8 @@ class KitProviderType {
 	}
 
 	async *create(spec, env) {
-		const root = this.kit.FileURI.fromPath(spec.project)
+		const base = spec.project ?? (await this.kit.repoRoot()).join('providers').path()
+		const root = this.kit.FileURI.fromPath(base)
 		const path = root.join(spec.name, 'index.js').path()
 
 		yield await env.createFile(path, providerTemplate(spec))

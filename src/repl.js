@@ -89,6 +89,15 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 				.map(({ source, output }) => `${promptedCode(source)}\n${output}`)
 				.join('\n\n')
 		},
+
+		stop() {
+			setTimeout(() => {
+				server.close()
+				process.exit(0)
+			}, 20)
+
+			return 'stopped'
+		},
 	}
 
 	const server = net.createServer((socket) => {

@@ -1,5 +1,29 @@
-import { parseArgs } from 'node:util'
+import { parseArgs as nodeParseArgs } from 'node:util'
 import { CommandFormatter } from './formatters/command.js'
+
+/**
+ * Parses argv like `node:util` parseArgs, but converts argument-parsing failures
+ * into {@link UserError} so invalid CLI input reports a clean message instead of
+ * a stack trace. Providers get the same behavior through `kit.parseArgs`.
+ *
+ * @example
+ * parseArgs({ args: ['--nope'], options: {}, strict: true }) // throws UserError
+ */
+export function parseArgs(config) {
+	try {
+		return nodeParseArgs(config)
+	} catch (error) {
+		if (typeof error?.code === 'string' && error.code.startsWith('ERR_PARSE_ARGS_')) {
+			throw new UserError(parseErrorMessage(error))
+		}
+
+		throw error
+	}
+}
+
+function parseErrorMessage(error) {
+	return error.message.replace(/\.\s+To specify a positional argument[\s\S]*$/, '.')
+}
 
 /**
  * Command is a small value object for defining CLI commands.
@@ -71,6 +95,14 @@ export class Command {
 			return context.cli.formatter.commandHelp(this, context.path ?? [this.name])
 		}
 
+		if (this.commands.size > 0 && commandName !== undefined && !commandName.startsWith('-')) {
+			const path = (context.path ?? [this.name]).join(' ')
+			const available = [...this.commands.keys()].join(', ')
+			throw new UserError(
+				`Unknown command: ${path} ${commandName}\n\nAvailable subcommands: ${available}`,
+			)
+		}
+
 		const parsed = this.parse(argv)
 		return this.run({ ...context, argv, command: this, parsed })
 	}
@@ -90,7 +122,7 @@ export class CLI {
 		const command = this.commands.get(commandName)
 
 		if (command === undefined) {
-			throw new Error(`Unknown command: ${commandName ?? '(none)'}`)
+			throw new UserError(`Unknown command: ${commandName ?? '(none)'}`)
 		}
 
 		return command.call(commandArgv, { ...context, cli: this })

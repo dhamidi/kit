@@ -1,3 +1,5 @@
+import { Type } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
 import { kit } from '../index.js'
@@ -20,10 +22,9 @@ export default defineCommand({
 			dryRun,
 			json,
 			intent,
-			project,
 			help,
 			argv: providerArgv,
-		} = await extractGenerateOptions(argv)
+		} = extractGenerateOptions(argv)
 		const [providerQuery, target] = providerArgv
 
 		if (help) {
@@ -46,7 +47,6 @@ export default defineCommand({
 		const spec = {
 			...reparsed.values,
 			intent,
-			project,
 		}
 
 		if (spec.name === undefined) {
@@ -57,6 +57,8 @@ export default defineCommand({
 		if (rest.parts().length > 1) {
 			spec.parent = rest.parts()[0]
 		}
+
+		assertValidSpec(match.candidate.provider, match.candidate.type, spec)
 
 		const env = dryRun ? createDryRunEnv() : kit.createFileEnv()
 
@@ -74,6 +76,77 @@ export default defineCommand({
 		}
 	},
 })
+
+/**
+ * Validates an assembled spec against the component type's TypeBox schema before
+ * a provider runs, so missing or malformed arguments produce readable CLI errors
+ * instead of crashing inside provider generation code.
+ *
+ * @example
+ * assertValidSpec(provider, type, { description: 'x' }) // throws: "name is required"
+ */
+function assertValidSpec(provider, type, spec) {
+	const schema = type.schema()
+
+	if (schema?.type !== 'object') {
+		return
+	}
+
+	const problems = fieldProblems(schema, spec)
+
+	if (problems.length === 0) {
+		return
+	}
+
+	throw new UserError(
+		[
+			`Cannot generate ${provider.name()} ${type.id()}:`,
+			...problems.map((problem) => `  ${problem}`),
+			'',
+			`Run \`kit generate ${provider.name()} ${type.id()} --help\` to see all fields.`,
+		].join('\n'),
+	)
+}
+
+/**
+ * Reduces TypeBox validation output to one readable message per offending field,
+ * enriched with each field's schema description.
+ */
+function fieldProblems(schema, spec) {
+	const specWithCommonFields = commonFieldsSchema(schema)
+	const seen = new Set()
+	const problems = []
+
+	for (const error of Value.Errors(specWithCommonFields, spec ?? {})) {
+		const field = error.path.replace(/^\//, '').split('/')[0]
+
+		if (field === '' || seen.has(field)) {
+			continue
+		}
+
+		seen.add(field)
+		const description = schema.properties?.[field]?.description
+		const missing = spec?.[field] === undefined
+		const reason = missing ? 'is required' : `is invalid (${error.message})`
+		problems.push(`${field} ${reason}${description ? ` — ${description}` : ''}`)
+	}
+
+	return problems
+}
+
+/**
+ * Extends an object schema with the Kit-common `intent` field the generate
+ * command adds to every spec, so it is not reported as an unknown property.
+ */
+function commonFieldsSchema(schema) {
+	return {
+		...schema,
+		properties: {
+			...schema.properties,
+			intent: Type.Optional(Type.String()),
+		},
+	}
+}
 
 function createDryRunEnv() {
 	return kit.Introspectable.includeInObject({
@@ -119,10 +192,9 @@ function planStateForEvent(value) {
 	}
 }
 
-async function extractGenerateOptions(argv) {
+function extractGenerateOptions(argv) {
 	const next = []
 	let intent
-	let project
 	let dryRun = false
 	let json = false
 	let help = false
@@ -135,9 +207,6 @@ async function extractGenerateOptions(argv) {
 		} else if (argv[index] === '--intent') {
 			intent = argv[index + 1]
 			index++
-		} else if (argv[index] === '--project') {
-			project = argv[index + 1]
-			index++
 		} else if (argv[index] === '--help') {
 			help = true
 		} else {
@@ -145,9 +214,7 @@ async function extractGenerateOptions(argv) {
 		}
 	}
 
-	project ??= (await kit.repoRoot()).join('.kit/providers').path()
-
-	return { dryRun, json, intent, project, help, argv: next }
+	return { dryRun, json, intent, help, argv: next }
 }
 
 async function generateHelp(providerQuery, target) {
@@ -155,7 +222,7 @@ async function generateHelp(providerQuery, target) {
 
 	if (providerQuery === undefined) {
 		return [
-			'Usage: kit generate [--project <path>] [--intent <text>] <provider> <component-type> [options]',
+			'Usage: kit generate [--intent <text>] <provider> <component-type> [options]',
 			'',
 			'Generate a component using a provider.',
 			'',
@@ -182,7 +249,6 @@ async function generateHelp(providerQuery, target) {
 			...types.map((type) => `  ${type.id().padEnd(typeWidth(types))}  ${type.description()}`),
 			'',
 			'Global options:',
-			'  --project <path>  Provider project/output directory; defaults to repoRoot/.kit/providers',
 			'  --intent <text>   Extra planning context for follow-up agent work',
 			'  -n, --dry-run     List generated files and print the final plan without writing or executing it',
 			'  --json            Output one JSON object per event',
@@ -215,7 +281,6 @@ function typeHelp(provider, type) {
 		...options.map(([name, property]) => {
 			return `  ${`--${name} <value>`.padEnd(width)}  ${property.description ?? ''}`
 		}),
-		`  ${'--project <path>'.padEnd(width)}  Provider project/output directory; defaults to repoRoot/.kit/providers`,
 		`  ${'--intent <text>'.padEnd(width)}  Extra planning context for follow-up agent work`,
 		`  ${'-n, --dry-run'.padEnd(width)}  List generated files and print the final plan without writing or executing it`,
 		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
