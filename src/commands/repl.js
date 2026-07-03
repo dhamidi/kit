@@ -119,7 +119,7 @@ async function ensureServer() {
 		fs.rmSync(replSocketPath(), { force: true })
 	} catch {}
 
-	const child = Bun.spawn([process.execPath, process.argv[1], 'repl', 'serve'], {
+	const child = Bun.spawn(replServerCommand(), {
 		cwd: process.cwd(),
 		env: process.env,
 		stderr: 'ignore',
@@ -139,6 +139,18 @@ async function ensureServer() {
 	}
 
 	throw new Error('Timed out waiting for Kit REPL server to start')
+}
+
+function replServerCommand() {
+	if (isStandaloneExecutable()) {
+		return [process.execPath, 'repl', 'serve']
+	}
+
+	return [process.execPath, process.argv[1], 'repl', 'serve']
+}
+
+function isStandaloneExecutable() {
+	return Bun.isStandaloneExecutable === true || process.argv[1]?.startsWith('/$bunfs/')
 }
 
 function wrap(body) {
