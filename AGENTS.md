@@ -1,0 +1,25 @@
+# Coding Guidelines
+
+- Use plain JavaScript ESM, not TypeScript, unless there is a clear need.
+- Run code with Bun; prefer Bun APIs where they simplify runtime/file/process work.
+- Take inspiration from Ruby-style OOP: tell objects what to do, don't ask for their state and branch externally.
+- Prefer calling clear methods and handling errors over defensive pre-checks scattered through callers.
+- Keep Kit as a small shell: providers own domain-specific generation logic.
+- When writing or reviewing providers, follow [PROVIDERS.md](PROVIDERS.md).
+- Model provider/component boundaries explicitly:
+  - providers list component types and component instances
+  - providers generate components and return streams of changes/plans
+  - Kit orchestrates, records, resumes, or aborts plan execution
+- Use `@sinclair/typebox` at external/runtime boundaries.
+- Put human-readable descriptions on TypeBox schemas with `description`; providers should read schema metadata instead of duplicating descriptions in hardcoded maps.
+- Prefer parse-don't-validate: convert unknown input into well-named runtime values that encode invariants.
+- Never use string operations to manipulate paths; parse them into `FileURI` values and call methods on those values.
+- For provider-reported components, derive names/descriptions from the source object being modeled so provider output stays synchronized with source code.
+- Add JSDoc comments for exported classes, functions, and non-obvious public methods; include examples for developer-facing APIs.
+- Pick descriptive names for functions, values, classes, modules, and component concepts.
+- Keep deterministic generation separate from LLM follow-up plans.
+- Always run `bun run kit generate ...` in a background/tmux task; generation can take a long time.
+- Do not run other `bun run kit ...` subcommands in the background; keep them foreground for direct feedback.
+- Make generated changes observable as structured events: created/read/removed/edited files, errors, and follow-up plans.
+- Avoid overfitting Kit to one framework; SvelteKit, TUI, frontend, database, etc. should plug in through providers.
+- Keep abstractions small and provider-oriented rather than building framework-specific logic into the core shell.

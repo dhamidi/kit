@@ -1,0 +1,15 @@
+{
+	"name": "kit",
+	"module": "src/main.js",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"kit": "bun src/main.js"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"dependencies": {
+		"@sinclair/typebox": "^0.34.49"
+	}
+}
