@@ -15,6 +15,7 @@ export class PlanExecutor {
 		formatter = new AgentUpdateFormatter(),
 		stateStore = new PersistentStateStore(),
 		shell = process.env.SHELL ?? '/bin/sh',
+		output = process.stdout,
 	} = {}) {
 		// An explicitly injected runner (e.g. in tests) wins over the named agent
 		// and is never rebuilt on resume.
@@ -24,6 +25,7 @@ export class PlanExecutor {
 		this.formatter = formatter
 		this.stateStore = stateStore
 		this.shell = shell
+		this.output = output
 	}
 
 	/**
@@ -74,7 +76,7 @@ export class PlanExecutor {
 		}
 
 		if (state.status === 'completed') {
-			console.log(`Plan ${id} is already complete`)
+			this.output.write(`Plan ${id} is already complete\n`)
 			return
 		}
 
@@ -99,6 +101,7 @@ export class PlanExecutor {
 	async runState(state) {
 		while (state.currentStepIndex < state.steps.length) {
 			const index = state.currentStepIndex
+			this.announceStep(state.steps[index], index, state.steps.length)
 			await this.runStep(state.steps[index], state)
 
 			// Checkpoint only after the step completes; an interrupted step is
@@ -115,6 +118,17 @@ export class PlanExecutor {
 		await this.stateStore.set(`plan/${state.id}`, state)
 	}
 
+	/**
+	 * Prints a progress header before a step runs so long-running agent steps are
+	 * visibly in progress even before the agent produces its first output.
+	 */
+	announceStep(step, index, total) {
+		const id = step.id ?? 'step'
+		const action = step.agent === undefined ? undefined : `running ${this.agent}…`
+		const suffix = action === undefined ? '' : ` — ${action}`
+		this.output.write(`\n[${index + 1}/${total}] ${id}${suffix}\n`)
+	}
+
 	async runStep(step, state) {
 		for (let attempt = 0; attempt < 2; attempt++) {
 			if (step.agent !== undefined) {
@@ -128,7 +142,7 @@ export class PlanExecutor {
 			const verification = await this.runVerifyStep(step)
 
 			if (verification.ok) {
-				console.log(`Verified ${step.verifyWithCommand}`)
+				this.output.write(`Verified ${step.verifyWithCommand}\n`)
 				return
 			}
 

@@ -117,13 +117,14 @@ class ManifestExecution {
 		})
 	}
 
-	constructor({ providers, resolved, json, path, runPlans, agent }) {
+	constructor({ providers, resolved, json, path, runPlans, agent, output = process.stdout }) {
 		this.providers = providers
 		this.resolved = resolved
 		this.json = json
 		this.path = path
 		this.runPlans = runPlans
 		this.agent = agent
+		this.output = output
 	}
 
 	async check() {
@@ -170,16 +171,19 @@ class ManifestExecution {
 
 	async run({ env, executePlans, dryRun }) {
 		await this.validate()
-		const lines = []
 		const planExecutor = executePlans ? new PlanExecutor({ agent: this.agent }) : undefined
 		const runner = new ManifestRunner({ providers: this.providers, env, executePlans, planExecutor })
 
+		// Write each event as it arrives so provider effects and agent progress
+		// stream to the user instead of appearing all at once when the run ends.
 		for await (const event of runner.run(this.resolved.operations)) {
 			const value = event.toJSON()
-			lines.push(this.json ? JSON.stringify(value) : formatEvent(value, { dryRun }))
-		}
+			const line = this.json ? JSON.stringify(value) : formatEvent(value, { dryRun })
 
-		return lines.filter(Boolean).join('\n')
+			if (line) {
+				this.output.write(`${line}\n`)
+			}
+		}
 	}
 }
 
