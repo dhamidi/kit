@@ -55,6 +55,7 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 		new() {
 			const id = randomUUID().slice(0, 8)
 			const ctx = typeof createContext === 'function' ? createContext() : { ...createContext }
+			ctx.repl = api
 			sessions.set(id, { ctx, transcript: [] })
 
 			return welcomeMessage(id, ctx)

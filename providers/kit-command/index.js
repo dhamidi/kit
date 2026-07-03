@@ -15,7 +15,7 @@ class KitCommandProvider {
 
 	async *components() {
 		for await (const path of new Glob('src/commands/*.js').scan({ cwd: process.cwd() })) {
-			const module = await import(String(new URL(path, `file://${process.cwd()}/`)))
+			const module = await import(this.kit.FileURI.fromPath(path).toString())
 			const command = module.default
 
 			yield new KitCommandComponent({

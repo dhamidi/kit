@@ -15,7 +15,7 @@ class KitEventProvider {
 
 	async *components() {
 		for await (const path of new Glob('src/events/*.js').scan({ cwd: process.cwd() })) {
-			const module = await import(String(new URL(path, `file://${process.cwd()}/`)))
+			const module = await import(this.kit.FileURI.fromPath(path).toString())
 			const family = path.replace(/^src\/events\//, '').replace(/\.js$/, '')
 
 			for (const [name, schema] of Object.entries(schemasFrom(module))) {

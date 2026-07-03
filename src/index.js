@@ -64,6 +64,7 @@ export { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 Introspectable.includeIn(ManifestResolver)
 Introspectable.includeIn(ManifestRunner)
 Introspectable.includeIn(ManifestVocabulary)
+Introspectable.includeIn(FileURI)
 
 export const kit = {
 	Type,
@@ -114,7 +115,7 @@ export const kit = {
 Introspectable.includeInObject(kit)
 
 export async function loadProvider(path) {
-	const module = await import(String(new URL(path, `file://${process.cwd()}/`)))
+	const module = await import(FileURI.fromPath(path).toString())
 	return module.default(kit)
 }
 

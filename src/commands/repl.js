@@ -35,10 +35,8 @@ export default defineCommand({
 				return transcript(args)
 			case 'ls':
 				return listSessions()
-			case 'raw':
-				return evalRaw(args)
 			default:
-				throw new UserError('usage: kit repl <new|do|transcript|ls|raw> [session] [code]')
+				throw new UserError('usage: kit repl <new|do|transcript|ls> [session] [code]')
 		}
 	},
 })
@@ -83,13 +81,6 @@ async function transcript(args) {
 async function listSessions() {
 	await ensureServer()
 	return sendReplExpression('repl.ls()')
-}
-
-async function evalRaw(args) {
-	await ensureServer()
-	const source = args.length === 0 ? fs.readFileSync(0, 'utf8') : args.join(' ')
-
-	return sendReplExpression(source)
 }
 
 function currentSession() {
