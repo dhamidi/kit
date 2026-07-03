@@ -1,4 +1,4 @@
-import { AmpAgentRunner } from './agent_runner.js'
+import { DEFAULT_AGENT, createAgentRunner } from './agent_runner.js'
 import { agentMessageToUpdate, agentThreadID, parseAgentLine } from './agents.js'
 import { UserError } from './cli.js'
 import { AgentUpdateFormatter } from './formatters/agent_updates.js'
@@ -10,21 +10,42 @@ import { PersistentStateStore } from './state_store.js'
  */
 export class PlanExecutor {
 	constructor({
-		agentRunner = new AmpAgentRunner(),
+		agent = DEFAULT_AGENT,
+		agentRunner,
 		formatter = new AgentUpdateFormatter(),
 		stateStore = new PersistentStateStore(),
 		shell = process.env.SHELL ?? '/bin/sh',
 	} = {}) {
-		this.agentRunner = agentRunner
+		// An explicitly injected runner (e.g. in tests) wins over the named agent
+		// and is never rebuilt on resume.
+		this.explicitRunner = agentRunner !== undefined
+		this.agent = agent
+		this.agentRunner = agentRunner ?? createAgentRunner(agent)
 		this.formatter = formatter
 		this.stateStore = stateStore
 		this.shell = shell
+	}
+
+	/**
+	 * Switches to a named agent unless a runner was explicitly injected.
+	 *
+	 * Used by resume so a plan continues with the agent it was started with,
+	 * because thread IDs are agent-specific and cannot be handed to another CLI.
+	 */
+	useAgent(name) {
+		if (this.explicitRunner) {
+			return
+		}
+
+		this.agent = name
+		this.agentRunner = createAgentRunner(name)
 	}
 
 	async execute(plan) {
 		const state = {
 			id: plan.id ?? crypto.randomUUID(),
 			status: 'running',
+			agent: this.agent,
 			plan,
 			currentStepIndex: 0,
 			steps: plan.steps,
@@ -57,6 +78,8 @@ export class PlanExecutor {
 			return
 		}
 
+		this.useAgent(state.agent ?? DEFAULT_AGENT)
+		state.agent = this.agent
 		state.status = 'running'
 		await this.drive(state)
 	}
@@ -153,6 +176,11 @@ export class PlanExecutor {
 
 			for (const line of new TextDecoder().decode(value.bytes).split('\n').filter(Boolean)) {
 				const message = parseAgentLine(line)
+
+				if (message === undefined) {
+					continue
+				}
+
 				threadID ??= agentThreadID(message)
 				step.agent.threadID = threadID
 

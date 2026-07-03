@@ -3,6 +3,7 @@ import { createFileEnv } from '../file_env.js'
 import { FileURI } from '../file_uri.js'
 import { ManifestResolver, ManifestVocabulary } from '../manifest/resolver.js'
 import { ManifestRunner, ManifestRunnerError } from '../manifest/runner.js'
+import { PlanExecutor } from '../plan_executor.js'
 import { parseManifest } from '../manifest/parser.js'
 import { PlanFormatter } from '../formatters/plan.js'
 import { discoverProviders } from '../provider_discovery.js'
@@ -86,6 +87,7 @@ manifest.command(defineCommand({
 	options: {
 		json: { type: 'boolean', description: 'Print provider events as JSON lines' },
 		'skip-plans': { type: 'boolean', description: 'Skip provider follow-up plans (executed by default)' },
+		agent: { type: 'string', description: 'Agent that executes follow-up plans (default: amp)' },
 	},
 	async run({ parsed }) {
 		const execution = await ManifestExecution.from(parsed)
@@ -111,15 +113,17 @@ class ManifestExecution {
 			json: parsed.values.json,
 			path,
 			runPlans: parsed.values['skip-plans'] !== true,
+			agent: parsed.values.agent,
 		})
 	}
 
-	constructor({ providers, resolved, json, path, runPlans }) {
+	constructor({ providers, resolved, json, path, runPlans, agent }) {
 		this.providers = providers
 		this.resolved = resolved
 		this.json = json
 		this.path = path
 		this.runPlans = runPlans
+		this.agent = agent
 	}
 
 	async check() {
@@ -167,7 +171,8 @@ class ManifestExecution {
 	async run({ env, executePlans, dryRun }) {
 		await this.validate()
 		const lines = []
-		const runner = new ManifestRunner({ providers: this.providers, env, executePlans })
+		const planExecutor = executePlans ? new PlanExecutor({ agent: this.agent }) : undefined
+		const runner = new ManifestRunner({ providers: this.providers, env, executePlans, planExecutor })
 
 		for await (const event of runner.run(this.resolved.operations)) {
 			const value = event.toJSON()

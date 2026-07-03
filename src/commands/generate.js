@@ -23,6 +23,7 @@ export default defineCommand({
 			dryRun,
 			json,
 			intent,
+			agent,
 			help,
 			argv: providerArgv,
 		} = extractGenerateOptions(argv)
@@ -72,7 +73,7 @@ export default defineCommand({
 					continue
 				}
 
-				await new kit.PlanExecutor().execute(value)
+				await new kit.PlanExecutor({ agent }).execute(value)
 			}
 		}
 	},
@@ -202,6 +203,7 @@ function planStateForEvent(value) {
 function extractGenerateOptions(argv) {
 	const next = []
 	let intent
+	let agent
 	let dryRun = false
 	let json = false
 	let help = false
@@ -214,6 +216,9 @@ function extractGenerateOptions(argv) {
 		} else if (argv[index] === '--intent') {
 			intent = argv[index + 1]
 			index++
+		} else if (argv[index] === '--agent') {
+			agent = argv[index + 1]
+			index++
 		} else if (argv[index] === '--help') {
 			help = true
 		} else {
@@ -221,7 +226,7 @@ function extractGenerateOptions(argv) {
 		}
 	}
 
-	return { dryRun, json, intent, help, argv: next }
+	return { dryRun, json, intent, agent, help, argv: next }
 }
 
 async function generateHelp(providerQuery, target) {
@@ -257,6 +262,7 @@ async function generateHelp(providerQuery, target) {
 			'',
 			'Global options:',
 			'  --intent <text>   Extra planning context for follow-up agent work',
+			'  --agent <name>    Agent that executes the follow-up plan (default: amp)',
 			'  -n, --dry-run     List generated files and print the final plan without writing or executing it',
 			'  --json            Output one JSON object per event',
 			'  --help            Show help',
@@ -289,6 +295,7 @@ function typeHelp(provider, type) {
 			return `  ${`--${name} <value>`.padEnd(width)}  ${property.description ?? ''}`
 		}),
 		`  ${'--intent <text>'.padEnd(width)}  Extra planning context for follow-up agent work`,
+		`  ${'--agent <name>'.padEnd(width)}  Agent that executes the follow-up plan (default: amp)`,
 		`  ${'-n, --dry-run'.padEnd(width)}  List generated files and print the final plan without writing or executing it`,
 		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
 		`  ${'--help'.padEnd(width)}  Show help`,

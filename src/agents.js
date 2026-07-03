@@ -59,18 +59,21 @@ export const agentUpdateSchema = Type.Union([
 ])
 
 /**
- * Parses one JSONL line from `amp --stream-json` into a permissive agent message.
+ * Parses one JSONL stream-json line into a known agent message, or undefined
+ * when the line is a message type Kit does not model.
  */
 export function parseAgentLine(line) {
 	return parseAgentMessage(JSON.parse(line))
 }
 
+/**
+ * Returns the value when it is an agent message Kit understands, otherwise
+ * undefined. Different agent CLIs emit extra event types Kit ignores (for
+ * example Claude's `rate_limit_event`), so callers skip unrecognized messages
+ * instead of failing the whole plan step.
+ */
 export function parseAgentMessage(value) {
-	if (!Value.Check(agentMessageSchema, value)) {
-		throw new Error(`Unknown agent message: ${JSON.stringify(value)}`)
-	}
-
-	return value
+	return Value.Check(agentMessageSchema, value) ? value : undefined
 }
 
 export function agentMessageToUpdate(message) {
