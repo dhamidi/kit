@@ -1,0 +1,12 @@
+# Add Claude as an agent runner so Kit can execute plans with the Claude CLI.
+#
+# The follow-up plan implements the runner, then gates on authentication: if the
+# Claude CLI is not logged in, the plan pauses with login + `kit plan resume`
+# instructions instead of claiming Claude is ready to execute plans.
+kit-agent runner {
+	name claude
+	command claude
+	intent "Add Claude as an agent runner for executing Kit plans"
+	authCheckCommand "claude whoami || test -n \"$ANTHROPIC_API_KEY\""
+	loginCommand "claude login"
+}
