@@ -199,6 +199,7 @@ Schema annotations also matter:
 - `pattern`, `minLength`, `maxLength`, `minimum`, and similar constraints are enforced.
 - `default` may be applied by the manifest normalizer if the provider schema declares it.
 - Provider-specific metadata such as `multiple: true` may allow repeated scalar fields.
+- Kit-specific metadata lives under `kit`, for example `kit: { cli: false }` hides a schema field from generated `kit generate` CLI flags without removing it from manifests.
 
 ### Strings and braces
 

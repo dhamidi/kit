@@ -8,9 +8,16 @@
 export function parseArgsOptionsFromSchema(schema) {
 	return Object.fromEntries(
 		Object.entries(schema.properties ?? {})
-			.filter(([, property]) => property.cli !== false)
+			.filter(([, property]) => isSchemaFieldVisibleInCLI(property))
 			.map(([name, property]) => [name, parseArgOption(property)]),
 	)
+}
+
+/**
+ * Returns whether a TypeBox schema field should be exposed as a generated CLI flag.
+ */
+export function isSchemaFieldVisibleInCLI(property) {
+	return property.kit?.cli !== false
 }
 
 function parseArgOption(property) {

@@ -169,7 +169,7 @@ process. Use `env.exec()` when you need collected stdout/stderr; yield
 
 ### `kit.parseArgs(config)` / `kit.parseArgsOptionsFromSchema(schema)`
 `parseArgsOptionsFromSchema` turns a TypeBox object schema into `node:util`
-parseArgs options (skipping `cli: false` fields). `parseArgs` runs `node:util`
+parseArgs options (skipping `kit: { cli: false }` fields). `parseArgs` runs `node:util`
 parseArgs but converts argument-parsing failures into `kit.UserError`, so a bad
 flag produces a clean one-line CLI error instead of a stack trace. Together they
 are how `type.parse(argv)` maps the CLI surface onto the same schema the manifest

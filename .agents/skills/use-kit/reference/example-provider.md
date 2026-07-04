@@ -17,7 +17,7 @@ Study it as the canonical example of the provider contract described in
   command and its subcommands — descriptions come from the *source object*, not
   hardcoded fallbacks.
 - **Schema is the source of truth.** `schema()` is a TypeBox object with
-  `description`, `examples`, `pattern`, and `cli: false` annotations. Help text,
+  `description`, `examples`, `pattern`, and `kit: { cli: false }` annotations. Help text,
   manifest vocabulary, and CLI options are all generated from it.
 - **One `parse()` for the CLI surface** via
   `kit.parseArgsOptionsFromSchema(this.schema())`; `create(spec, env)` is the
@@ -32,7 +32,7 @@ Study it as the canonical example of the provider contract described in
 ## Key spots to read first
 
 - `KitCommandType.schema()` — how to declare fields, examples, patterns, and
-  `cli: false` (fields that exist in manifests but are hidden from the CLI).
+  `kit: { cli: false }` (fields that exist in manifests but are hidden from generated CLI flags).
 - `KitCommandType.create(spec, env)` — the deterministic-then-plan shape,
   including the special-cased `component show` branch.
 - `commandTemplate` / `commandGroupTemplate` — generating leaf vs. group
@@ -121,13 +121,13 @@ class KitCommandType {
 				description: 'Kebab-case command or subcommand name',
 				examples: ['components-list', 'generate'],
 				pattern: '^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
-				cli: false,
+				kit: { cli: false },
 			}),
 			parent: Type.Optional(
 				Type.String({
 					description: 'Optional parent command name for nested commands',
 					examples: ['component'],
-					cli: false,
+					kit: { cli: false },
 				}),
 			),
 			arg: Type.Optional(
@@ -139,7 +139,7 @@ class KitCommandType {
 			description: Type.String({
 				description: 'Short user-facing description of the command',
 				examples: ['List all known components'],
-				cli: false,
+				kit: { cli: false },
 			}),
 			options: Type.Optional(
 				Type.Record(
@@ -151,7 +151,7 @@ class KitCommandType {
 					parseArgOption,
 					{
 						description: 'Option definitions forwarded to node:util parseArgs',
-						cli: false,
+						kit: { cli: false },
 						examples: [
 							{
 								help: { type: 'boolean', short: 'h' },

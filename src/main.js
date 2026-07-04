@@ -4,7 +4,7 @@ import generate from './commands/generate.js'
 import help from './commands/help.js'
 import manifest from './commands/manifest.js'
 import plan from './commands/plan.js'
-import providers from './commands/providers.js'
+import provider from './commands/provider.js'
 import repl from './commands/repl.js'
 
 /**
@@ -14,7 +14,7 @@ import repl from './commands/repl.js'
  * await main(['help'])
  */
 export async function main(argv = Bun.argv.slice(2)) {
-	const result = await createCLI([help, components, providers, generate, plan, repl, manifest]).run(
+	const result = await createCLI([help, components, provider, generate, plan, repl, manifest]).run(
 		argv.length === 0 ? ['help'] : argv,
 	)
 

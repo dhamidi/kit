@@ -97,8 +97,9 @@ Manifest resolution is schema-directed: after resolving the head it reads
 Schema annotations are enforced: object `required` keys, `additionalProperties:
 false` (rejects unknown fields), `pattern`/`minLength`/`maxLength`/`minimum`,
 `default` (may be applied by the normalizer), and provider metadata like
-`multiple: true` (allows repeated scalars). A `cli: false` annotation hides a
-field from the `generate` CLI but it is still a manifest field.
+`multiple: true` (allows repeated scalars). Kit-specific metadata lives under
+`kit`; `kit: { cli: false }` hides a field from the `generate` CLI but it is
+still a manifest field.
 
 ### Braces are schema-directed
 

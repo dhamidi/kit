@@ -76,13 +76,13 @@ class KitCommandType {
 				description: 'Kebab-case command or subcommand name',
 				examples: ['components-list', 'generate'],
 				pattern: '^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
-				cli: false,
+				kit: { cli: false },
 			}),
 			parent: Type.Optional(
 				Type.String({
 					description: 'Optional parent command name for nested commands',
 					examples: ['component'],
-					cli: false,
+					kit: { cli: false },
 				}),
 			),
 			arg: Type.Optional(
@@ -94,7 +94,7 @@ class KitCommandType {
 			description: Type.String({
 				description: 'Short user-facing description of the command',
 				examples: ['List all known components'],
-				cli: false,
+				kit: { cli: false },
 			}),
 			options: Type.Optional(
 				Type.Record(
@@ -106,7 +106,7 @@ class KitCommandType {
 					parseArgOption,
 					{
 						description: 'Option definitions forwarded to node:util parseArgs',
-						cli: false,
+						kit: { cli: false },
 						examples: [
 							{
 								help: { type: 'boolean', short: 'h' },
@@ -159,6 +159,32 @@ class KitCommandType {
 			return
 		}
 
+		if (spec.parent === 'provider' && spec.name === 'show') {
+			yield await env.editFile('src/commands/provider.js', (source) =>
+				addProviderShowCommand(source, spec),
+			)
+			yield this.kit.Event.plan(
+				'Finish generated provider show command',
+				[
+					{
+						id: 'fill-in-command',
+						instructions: 'Use Amp to finish generated command implementation',
+						files: ['src/commands/provider.js'],
+						agent: {
+							prompt: providerShowPrompt(spec),
+						},
+					},
+					{
+						id: 'verify-command',
+						instructions: 'Verify generated provider show command works',
+						verifyWithCommand: 'bun run kit provider show kit-command.component',
+					},
+				],
+				{ intent: spec.intent },
+			)
+			return
+		}
+
 		const path = `src/commands/${spec.parent ?? spec.name}.js`
 		const source = commandTemplate(spec)
 
@@ -186,6 +212,15 @@ function componentShowPrompt(spec) {
 	return `Intent: ${spec.intent ?? 'Show detailed information about a component'}
 
 Finish the generated component show command in src/commands/components.js.
+Use existing Kit CLI, provider, event, and formatter patterns.
+Do not refactor unrelated code.`
+}
+
+function providerShowPrompt(spec) {
+	return `Intent: ${spec.intent ?? 'Show detailed information about a provider'}
+
+Finish the generated provider show command in src/commands/provider.js.
+It should list component type summaries for provider show <provider> and schema details for provider show <provider>.<type>.
 Use existing Kit CLI, provider, event, and formatter patterns.
 Do not refactor unrelated code.`
 }
@@ -229,6 +264,40 @@ components.command(defineCommand({
 }))
 
 export default components
+`,
+	)
+}
+
+function addProviderShowCommand(source, spec) {
+	if (source.includes("name: 'show'")) {
+		return source
+	}
+
+	if (!source.includes("import { defineCommand, UserError } from '../cli.js'")) {
+		source = source.replace(
+			"import { defineCommand } from '../cli.js'",
+			"import { defineCommand, UserError } from '../cli.js'",
+		)
+	}
+
+	return source.replace(
+		'\nexport default provider\n',
+		`
+provider.command(defineCommand({
+	name: 'show',
+	description: ${JSON.stringify(spec.description)},
+	async run({ parsed }) {
+		const providerName = parsed.positionals[0]
+
+		if (providerName === undefined) {
+			throw new UserError('Usage: kit provider show <provider>[.<type>]')
+		}
+
+		throw new Error('Command provider.show is not implemented yet')
+	},
+}))
+
+export default provider
 `,
 	)
 }

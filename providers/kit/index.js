@@ -49,7 +49,7 @@ class KitTaskType {
 				description: 'Kebab-case task name used to identify the follow-up plan',
 				examples: ['inject-secret-files-into-sandboxes'],
 				pattern: '^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
-				cli: false,
+				kit: { cli: false },
 			}),
 			file: Type.Optional(
 				Type.Array(

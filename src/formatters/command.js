@@ -89,6 +89,31 @@ export class CommandFormatter {
 		}
 	}
 
+	async providerShow(provider) {
+		this.writeLine(`Provider: ${provider.name()}`)
+		this.writeLine('')
+
+		const table = new TableFormatter(['Type', 'Description'], this.output)
+
+		for await (const type of provider.types()) {
+			table.row([type.id(), type.description()])
+		}
+
+		if (table.isEmpty()) {
+			this.writeLine('No component types')
+		} else {
+			table.flush()
+		}
+	}
+
+	providerTypeShow(provider, type) {
+		this.writeLine(`Provider: ${provider.name()}`)
+		this.writeLine(`Type: ${type.id()}`)
+		this.writeLine(`Description: ${type.description()}`)
+		this.writeLine('')
+		writeSchema(type.schema(), this.output)
+	}
+
 	async componentsList(events, { prefix } = {}) {
 		const table = new TableFormatter(['Component', 'Description'], this.output)
 		const prefixID = prefix === undefined ? undefined : Identifier.fromString(prefix)
@@ -181,4 +206,154 @@ function inspectFieldValue(value) {
 	}
 
 	return String(value)
+}
+
+function writeSchema(schema, output) {
+	if (schema.properties !== undefined) {
+		writeMetadata(schema, output, '')
+		writeObjectFields('Fields', schema, output, '')
+		return
+	}
+
+	output.write(`Schema: ${schemaTypeName(schema)}\n`)
+	writeMetadata(schema, output, '  ')
+}
+
+function writeObjectFields(title, schema, output, indent) {
+	const entries = Object.entries(schema.properties ?? {})
+	const required = new Set(schema.required ?? [])
+
+	output.write(`${indent}${title}:\n`)
+
+	if (entries.length === 0) {
+		output.write(`${indent}  (none)\n`)
+		return
+	}
+
+	const nameWidth = Math.max(...entries.map(([name]) => name.length))
+	const typeWidth = Math.max(...entries.map(([, field]) => schemaTypeName(field).length))
+
+	for (const [name, field] of entries) {
+		const presence = required.has(name) ? 'required' : 'optional'
+		output.write(
+			`${indent}  ${name.padEnd(nameWidth)}  ${schemaTypeName(field).padEnd(typeWidth)}  ${presence}\n`,
+		)
+		writeMetadata(field, output, `${indent}    `)
+		writeNestedSchema(field, output, `${indent}    `)
+	}
+}
+
+function writeNestedSchema(schema, output, indent) {
+	if (schema.patternProperties !== undefined) {
+		writeRecordSchema(schema, output, indent)
+		return
+	}
+
+	if (schema.properties !== undefined) {
+		writeObjectFields('Fields', schema, output, indent)
+	}
+}
+
+function writeRecordSchema(schema, output, indent) {
+	for (const [pattern, value] of Object.entries(schema.patternProperties)) {
+		output.write(`${indent}Keys: string\n`)
+		output.write(`${indent}  Pattern: ${pattern}\n`)
+		output.write(`${indent}Values: ${schemaTypeName(value)}\n`)
+		writeMetadata(value, output, `${indent}  `)
+		writeNestedSchema(value, output, `${indent}  `)
+	}
+}
+
+function writeMetadata(schema, output, indent) {
+	if (schema.description !== undefined) {
+		output.write(`${indent}${schema.description}\n`)
+	}
+
+	if (schema.pattern !== undefined) {
+		output.write(`${indent}Pattern: ${schema.pattern}\n`)
+	}
+
+	if (schema.minLength !== undefined || schema.maxLength !== undefined) {
+		output.write(`${indent}Length: ${lengthRange(schema)}\n`)
+	}
+
+	if (schema.default !== undefined) {
+		output.write(`${indent}Default: ${formatValue(schema.default)}\n`)
+	}
+
+	if (schema.examples !== undefined) {
+		writeExamples(schema.examples, output, indent)
+	}
+
+	if (schema.kit?.cli === false) {
+		output.write(`${indent}Generate flag: hidden\n`)
+	}
+
+	if (schema.multiple === true) {
+		output.write(`${indent}Multiple: true\n`)
+	}
+
+	if (schema.additionalProperties === false) {
+		output.write(`${indent}Additional properties: false\n`)
+	}
+}
+
+function writeExamples(examples, output, indent) {
+	if (examples.every((example) => example === null || typeof example !== 'object')) {
+		output.write(`${indent}Examples: ${examples.map(formatValue).join(', ')}\n`)
+		return
+	}
+
+	output.write(`${indent}Examples:\n`)
+
+	for (const example of examples) {
+		for (const line of JSON.stringify(example, null, 2).split('\n')) {
+			output.write(`${indent}  ${line}\n`)
+		}
+	}
+}
+
+function schemaTypeName(schema) {
+	if (schema.const !== undefined) {
+		return formatLiteral(schema.const)
+	}
+
+	if (schema.anyOf !== undefined) {
+		return schema.anyOf.map(schemaTypeName).join(' | ')
+	}
+
+	if (schema.allOf !== undefined) {
+		return schema.allOf.map(schemaTypeName).join(' & ')
+	}
+
+	if (schema.type === 'array') {
+		return `${schemaTypeName(schema.items)}[]`
+	}
+
+	if (schema.patternProperties !== undefined) {
+		const value = Object.values(schema.patternProperties)[0]
+		return `record<string, ${schemaTypeName(value)}>`
+	}
+
+	return schema.type ?? 'unknown'
+}
+
+function lengthRange(schema) {
+	if (schema.minLength !== undefined && schema.maxLength !== undefined) {
+		return `${schema.minLength}..${schema.maxLength}`
+	}
+
+	if (schema.minLength !== undefined) {
+		return `>= ${schema.minLength}`
+	}
+
+	return `<= ${schema.maxLength}`
+}
+
+function formatValue(value) {
+	return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+function formatLiteral(value) {
+	return JSON.stringify(value)
 }

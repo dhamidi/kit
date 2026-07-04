@@ -4,6 +4,7 @@ import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
 import { createFileEnv } from '../file_env.js'
 import { kit } from '../index.js'
+import { isSchemaFieldVisibleInCLI } from '../schema_args.js'
 
 /**
  * Command for generating components through provider component types.
@@ -281,7 +282,7 @@ async function generateHelp(providerQuery, target) {
 function typeHelp(provider, type) {
 	const schema = type.schema()
 	const options = Object.entries(schema.properties ?? {}).filter(
-		([, property]) => property.cli !== false,
+		([, property]) => isSchemaFieldVisibleInCLI(property),
 	)
 	const width = Math.max('--help'.length, ...options.map(([name]) => `--${name} <value>`.length))
 
