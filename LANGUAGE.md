@@ -147,11 +147,11 @@ In this checkout, when run with repo-root provider discovery, the live vocabular
 includes:
 
 ```txt
-kit-provider provider
-kit-command component
+kit task
 kit-event event
-server-route route
-tui command
+kit-provider provider
+kit-agent runner
+kit-command component
 ```
 
 That list is not hard-coded language grammar. It is runtime provider state.
@@ -443,8 +443,8 @@ surface is the safer first target for LLM-generated artifacts.
 
 ## Escape hatch
 
-When no provider type fits, do not invent a manifest head. Add a provider, or use a real generic
-provider/type such as a future `kit task`:
+When no provider type fits, do not invent a manifest head. Add a provider, or use the generic
+provider-backed `kit task` escape hatch:
 
 ```kit
 kit task {
@@ -460,13 +460,16 @@ kit task {
 }
 ```
 
-`kit task` is not language grammar. It should be a normal provider/type with a TypeBox schema. It is
-the sanctioned generic escape hatch only if the provider exists.
+`kit task` is not language grammar. It is a normal provider/type with a TypeBox schema. The `kit`
+provider owns its fields and execution behavior like any other provider: `name` identifies the task,
+repeated `file` fields list relevant workspace files, and `intent` carries the human-reviewed work
+request. Applying the manifest emits a follow-up plan for an agent; use `kit manifest plan` or
+`kit manifest apply --skip-plans` to review it without running the agent.
 
 ## Design rule
 
 Surface syntax is replaceable. TypeBox-backed provider vocabulary is the contract.
 
 If a manifest needs a concept that cannot be expressed as `provider + type + spec`, first ask
-whether that concept deserves a provider. If not, it belongs in `intent` or a real generic provider
-such as `kit task`, not in the language grammar.
+whether that concept deserves a provider. If not, it belongs in `intent` or the generic `kit task`
+provider/type, not in the language grammar.
