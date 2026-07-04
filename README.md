@@ -158,3 +158,7 @@ It commits to bun as the runtime, because having a featureful base is nice.
 It stays disciplined by using @sinclair/typebox at the edges, picking good names,
 and following parse-don't-validate to encode invariants in runtime values, instead of
 relying on compile time checks.
+
+## Contributing.
+
+Not yet, please.
