@@ -1,6 +1,7 @@
 # kit
 
->[!WARNING]: alpha-quality software and intellectual playground.
+> [!WARNING]
+> alpha-quality software and intellectual playground.
 > No stability guaranteed.
 
 Kit builds things.
