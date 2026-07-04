@@ -21,6 +21,16 @@ await rm(dist, { recursive: true, force: true })
 await mkdir(dist, { recursive: true })
 
 for (const [target, platform, binaryName] of targets) {
-	const output = `${dist}/kit-${version}-${platform}${binaryName.endsWith('.exe') ? '.exe' : ''}`
+	const build = `${dist}/build/${platform}`
+	const output = `${build}/${binaryName}`
+	await mkdir(build, { recursive: true })
 	await $`bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --target=${target} --outfile=${output} src/main.js`
+
+	if (binaryName.endsWith('.exe')) {
+		await $`zip -j ${dist}/kit-${version}-${platform}.zip ${output}`
+	} else {
+		await $`tar -czf ${dist}/kit-${version}-${platform}.tar.gz -C ${build} ${binaryName}`
+	}
 }
+
+await rm(`${dist}/build`, { recursive: true, force: true })
