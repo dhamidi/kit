@@ -20,6 +20,16 @@ In the meantime we've learned that:
 
 It's time to bring this idea back so that our agents can reason on the same level as developers.
 
+## Installation
+
+Install using mise:
+
+```sh
+mise use -g github:dhamidi/kit@v0.2.1
+```
+
+or [download directly](https://github.com/dhamidi/kit/releases/)
+
 ## Working with kit
 
 For kit to be useful, ask your favorite agent to run kit help and build a provider 
