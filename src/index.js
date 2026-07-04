@@ -24,7 +24,7 @@ import {
 	inspectComponent,
 	providerDiscoveryPaths,
 } from './provider_discovery.js'
-import { replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
+import { replHistoryFile, replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
 import { repoRoot } from './repo_root.js'
 import { parseArgsOptionsFromSchema } from './schema_args.js'
 import { spawn } from './spawn.js'
@@ -56,7 +56,7 @@ export {
 	inspectComponent,
 	providerDiscoveryPaths,
 } from './provider_discovery.js'
-export { replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
+export { replHistoryFile, replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
 export { repoRoot } from './repo_root.js'
 export { parseArgsOptionsFromSchema } from './schema_args.js'
 export { spawn } from './spawn.js'
@@ -105,6 +105,7 @@ export const kit = {
 	parseArgsOptionsFromSchema,
 	parseArgs,
 	repoRoot,
+	replHistoryFile,
 	replSessionFile,
 	replSocketPath,
 	replStateDirectory,
@@ -168,6 +169,7 @@ function kitDocs() {
 		parseArgsOptionsFromSchema: 'Converts a TypeBox object schema into node:util parseArgs options, respecting cli: false fields.',
 		parseArgs: 'node:util parseArgs wrapper that turns parse failures into clean UserError messages.',
 		repoRoot: 'Runs git rev-parse --show-toplevel and returns the repository root as a FileURI. Call .path() if an API needs a native string.',
+		replHistoryFile: 'Returns the cache file that stores interactive REPL history for this workspace.',
 		replSessionFile: 'Returns the cache file that stores the current REPL session id for this workspace.',
 		replSocketPath: 'Returns the Unix socket path used by this workspace’s persistent Kit REPL server.',
 		replStateDirectory: 'Returns the cache directory where Kit stores REPL sockets/sessions and plan state.',

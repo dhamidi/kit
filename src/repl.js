@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { inspect } from 'node:util'
+import vm from 'node:vm'
 
 const AsyncFunction = (async () => {}).constructor
 
@@ -37,6 +38,16 @@ export function replSessionFile() {
 	return path.join(replStateDirectory(), `session-${replWorkspaceID()}`)
 }
 
+/**
+ * Returns the file used to store interactive Kit REPL history for this workspace.
+ *
+ * @example
+ * replHistoryFile()
+ */
+export function replHistoryFile() {
+	return path.join(replStateDirectory(), `history-${replWorkspaceID()}`)
+}
+
 function replWorkspaceID() {
 	return createHash('sha1').update(process.cwd()).digest('hex').slice(0, 12)
 }
@@ -56,7 +67,7 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 			const id = randomUUID().slice(0, 8)
 			const ctx = typeof createContext === 'function' ? createContext() : { ...createContext }
 			ctx.repl = api
-			sessions.set(id, { ctx, transcript: [] })
+			sessions.set(id, { ctx, context: vm.createContext(ctx), transcript: [] })
 
 			return welcomeMessage(id, ctx)
 		},
@@ -72,7 +83,7 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 				throw new Error(`no session ${id}`)
 			}
 
-			const { output, source } = await evaluate(session.ctx, code)
+			const { output, source } = await evaluate(session, code)
 			session.transcript.push({ source, output })
 
 			return output
@@ -88,6 +99,16 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 			return session.transcript
 				.map(({ source, output }) => `${promptedCode(source)}\n${output}`)
 				.join('\n\n')
+		},
+
+		complete(id, line) {
+			const session = sessions.get(id)
+
+			if (session === undefined) {
+				throw new Error(`no session ${id}`)
+			}
+
+			return JSON.stringify(completionCandidates(session, line))
 		},
 
 		stop() {
@@ -185,6 +206,7 @@ function welcomeMessage(id, ctx) {
 		'  kit manifest apply <file|->      invoke providers sequentially',
 		'',
 		'Examples, using `kit` as a placeholder for however you invoke Kit:',
+		'  kit repl --interactive',
 		"  kit repl do 'kit.methods().map(method => method.signature())'",
 		'  kit repl do \'kit.method("spawn").source()\'',
 		"  kit repl do 'kit.ManifestRunner.instanceMethods().map(String)'",
@@ -197,36 +219,45 @@ function welcomeMessage(id, ctx) {
 	].join('\n')
 }
 
-async function evaluate(ctx, code) {
-	const { fn, source } = evaluatorFor(code)
+async function evaluate(session, code) {
+	const source = String(code)
 	const logs = []
-	const originalLog = console.log
+	const hadConsole = Object.hasOwn(session.ctx, 'console')
+	const originalConsole = session.ctx.console
+	const console = { ...globalThis.console }
 	console.log = (...args) => {
 		logs.push(args.map((value) => (typeof value === 'string' ? value : inspect(value))).join(' '))
 	}
+	session.ctx.console = console
 
 	try {
-		const value = await fn(ctx)
+		const value = await evaluateInContext(source, session.context)
 		return { output: `${logOutput(logs)}=> ${inspect(value, { depth: 6 })}`, source }
 	} catch (error) {
 		return { output: `${logOutput(logs)}! ${error.stack ?? String(error)}`, source }
 	} finally {
-		console.log = originalLog
+		if (hadConsole) {
+			session.ctx.console = originalConsole
+		} else {
+			delete session.ctx.console
+		}
 	}
 }
 
-function evaluatorFor(code) {
-	if (typeof code === 'function') {
-		return { fn: code, source: code.toString() }
-	}
-
-	const source = String(code)
-
+function evaluateInContext(source, context) {
 	try {
-		return { fn: new AsyncFunction('ctx', `with (ctx) { return (${source}) }`), source }
-	} catch {
-		return { fn: new AsyncFunction('ctx', `with (ctx) { ${source} }`), source }
+		return vm.runInContext(source, context)
+	} catch (error) {
+		if (error.name === 'SyntaxError' && usesTopLevelAwait(source)) {
+			return vm.runInContext(`(async () => (${source}))()`, context)
+		}
+
+		throw error
 	}
+}
+
+function usesTopLevelAwait(source) {
+	return /\bawait\b/.test(source)
 }
 
 function logOutput(logs) {
@@ -239,6 +270,85 @@ function promptedCode(code) {
 		.split('\n')
 		.map((line) => `> ${line}`)
 		.join('\n')
+}
+
+function completionCandidates(session, line) {
+	const ctx = session.ctx
+	const token = completionToken(line)
+
+	if (token === '') {
+		return []
+	}
+
+	const method = token.match(/^kit\.method\((["'])([^"']+)\1\)\.([A-Za-z_$][\w$]*)?$/)
+
+	if (method !== null) {
+		const prefix = method[3] ?? ''
+		return propertyCompletions(`kit.method(${method[1]}${method[2]}${method[1]}).`, ctx.kit?.method(method[2]), prefix)
+	}
+
+	const parts = token.split('.')
+
+	if (parts.length === 1) {
+		return Object.keys(ctx).filter((name) => name.startsWith(token)).sort()
+	}
+
+	const propertyPrefix = parts.at(-1) ?? ''
+	const owner = resolvePath(ctx, parts.slice(0, -1))
+
+	if (owner === undefined || owner === null) {
+		return []
+	}
+
+	return propertyCompletions(`${parts.slice(0, -1).join('.')}.`, owner, propertyPrefix)
+}
+
+function completionToken(line) {
+	return line.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?$|kit\.method\(["'][^"']+["']\)\.[A-Za-z_$]*$/)?.[0] ?? ''
+}
+
+function resolvePath(ctx, parts) {
+	let value = ctx[parts[0]]
+
+	for (const part of parts.slice(1)) {
+		value = value?.[part]
+	}
+
+	return value
+}
+
+function propertyCompletions(base, value, prefix) {
+	return propertyNames(value)
+		.filter((name) => name.startsWith(prefix))
+		.sort()
+		.map((name) => `${base}${name}`)
+}
+
+function propertyNames(value) {
+	if (value === undefined || value === null) {
+		return []
+	}
+
+	const names = new Set()
+	let object = Object(value)
+
+	while (object !== null) {
+		for (const name of Object.getOwnPropertyNames(object)) {
+			if (!name.startsWith('_')) {
+				names.add(name)
+			}
+		}
+
+		object = Object.getPrototypeOf(object)
+	}
+
+	if (typeof value?.methods === 'function') {
+		for (const method of value.methods()) {
+			names.add(String(method))
+		}
+	}
+
+	return [...names]
 }
 
 /**
