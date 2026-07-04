@@ -1,5 +1,8 @@
 # kit
 
+>[!WARNING]: alpha-quality software and intellectual playground.
+> No stability guaranteed.
+
 Kit builds things.
 
 At a low level, software is made from functions, classes, values, and modules.
@@ -16,6 +19,67 @@ In the meantime we've learned that:
 - ast-grep gets you very far with static analysis.
 
 It's time to bring this idea back so that our agents can reason on the same level as developers.
+
+## Working with kit
+
+For kit to be useful, ask your favorite agent to run kit help and build a provider 
+for a component you care about:
+
+> Run kit help, then build a kit provider for CLI subcommands in this project.
+> The provider should use ast-grep and expose the commands' options and parameters.
+
+This teaches kit how CLI subcommands in your project work; 
+after that kit can list existing ones, and create new ones for you.
+
+This generalizes to everything your application cares about: background workers, UI components,
+database migrations, spritesheets, etc.
+
+Any kind of pattern you already have in your codebase.
+
+Once you have taught kit about a few of these components, you can ask it for bigger chunks of work:
+
+> Hey kit, I need a set of CLI commands to manage the application's settings.
+> Show me the manifest.
+
+A **manifest** is just a list of things you want to exist, matched against what providers offer.
+
+This manifest snippet expresses that you want a `settings list` subcommand to exist.
+
+The `intent` explains what it should do.
+
+Obviously you don't write this yourself, you iterate on it with your agent.
+
+```tcl
+cli command {
+	parent settings
+	name list
+	signature "list"
+	description "List all application settings with their associated value"
+	intent {
+    Enumerate all settings and their values read from the config file in
+    ~/.config/myapp/settings.json, including their values.
+
+    Use the existing AppSettings class for reading the file.
+  }
+}
+# ... more ...
+```
+
+Once you are happy with the manifest you tell kit to build it:
+
+```sh
+kit manifest apply cli-settings.kit
+```
+
+Kit will then happily bootstrap all of the parts that are easy:
+
+- create the right skeleton files,
+- wire up imports,
+- register the new commands, etc.
+
+And then it uses the intent to spawn an agent (by default: [amp](https://ampcode.com)),
+to *fill in the blanks*: make the command actually do the work it needs to do, based
+on the provided intent.
 
 ## How kit works
 
