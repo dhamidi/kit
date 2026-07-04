@@ -198,16 +198,19 @@ export class PlanExecutor {
 				threadID ??= agentThreadID(message)
 				step.agent.threadID = threadID
 
-				const update = agentMessageToUpdate(message)
-
-				if (update !== undefined) {
-					if (update.name !== undefined) {
-						update.name = `${step.id}:${update.name}`
-					} else {
-						update.kind = `${step.id}:${update.kind}`
+				for (const update of agentMessageToUpdate(message)) {
+					// The result is the step outcome, not another activity line; it
+					// feeds the next step's prompt and the closing marker below
+					// instead of being echoed inline.
+					if (update.kind === 'result') {
+						lastOutput = update.text
+						continue
 					}
 
-					lastOutput = update.text
+					if (update.kind === 'assistant') {
+						lastOutput = update.text
+					}
+
 					this.formatter.write(update)
 				}
 			}
@@ -217,6 +220,7 @@ export class PlanExecutor {
 			throw agentFailure(step, exitCode, new TextDecoder().decode(join(stderr)).trim())
 		}
 
+		this.output.write(`${step.id ?? 'step'} — done\n`)
 		return lastOutput
 	}
 

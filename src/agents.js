@@ -45,7 +45,7 @@ export const agentUpdateSchema = Type.Union([
 		{
 			kind: Type.Literal('tool'),
 			name: Type.String(),
-			text: Type.String(),
+			input: Type.Unknown(),
 		},
 		{ additionalProperties: false },
 	),
@@ -76,35 +76,43 @@ export function parseAgentMessage(value) {
 	return Value.Check(agentMessageSchema, value) ? value : undefined
 }
 
+/**
+ * Converts one agent message into the display updates it contains.
+ *
+ * An assistant message can carry several content blocks, so this returns one
+ * update per meaningful block (each text block and each tool call) rather than
+ * collapsing to the first — otherwise narration accompanying a tool call, or a
+ * message with several tool calls, would be lost.
+ *
+ * @returns {Array<object>} zero or more updates, in the order they appear.
+ */
 export function agentMessageToUpdate(message) {
 	if (message.type === 'assistant') {
-		return assistantUpdate(message)
+		return assistantUpdates(message)
 	}
 
 	if (message.type === 'result') {
-		return { kind: 'result', text: message.result ?? message.subtype ?? 'done' }
+		return [{ kind: 'result', text: message.result ?? message.subtype ?? 'done' }]
 	}
 
-	return undefined
+	return []
 }
 
 export function agentThreadID(message) {
 	return message.session_id
 }
 
-function assistantUpdate(message) {
+function assistantUpdates(message) {
 	const content = message.message?.content ?? []
-	const toolUse = content.find((block) => block.type === 'tool_use')
+	const updates = []
 
-	if (toolUse !== undefined) {
-		return { kind: 'tool', name: toolUse.name, text: JSON.stringify(toolUse.input ?? {}) }
+	for (const block of content) {
+		if (block.type === 'tool_use') {
+			updates.push({ kind: 'tool', name: block.name, input: block.input ?? {} })
+		} else if (block.type === 'text' && block.text) {
+			updates.push({ kind: 'assistant', text: block.text })
+		}
 	}
 
-	const text = content.find((block) => block.type === 'text')?.text
-
-	if (text !== undefined) {
-		return { kind: 'assistant', text }
-	}
-
-	return undefined
+	return updates
 }
