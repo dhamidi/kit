@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline'
 import { defineCommand, UserError } from '../cli.js'
 import { kit } from '../index.js'
 import {
+	REPL_IDLE_TIMEOUT_MS,
 	replHistoryFile,
 	replSessionFile,
 	replSocketPath,
@@ -58,6 +59,7 @@ async function serve() {
 			kit,
 		}),
 		replSocketPath(),
+		{ idleTimeoutMs: REPL_IDLE_TIMEOUT_MS },
 	)
 
 	await new Promise(() => {})

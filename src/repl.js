@@ -7,6 +7,9 @@ import vm from 'node:vm'
 
 const AsyncFunction = (async () => {}).constructor
 
+/** Thirty minutes in milliseconds, the default idle lifetime for spawned REPL servers. */
+export const REPL_IDLE_TIMEOUT_MS = 30 * 60 * 1000
+
 /**
  * Returns Kit's REPL state directory under XDG_CACHE_DIR or $HOME/.cache.
  *
@@ -54,14 +57,31 @@ function replWorkspaceID() {
 
 /**
  * Starts a small Unix-socket REPL server with per-session contexts.
+ * Set `idleTimeoutMs` to expire the server after a quiet period; every
+ * incoming command resets the timer.
  *
  * @example
  * startRepl(() => ({ kit }))
  */
-export function startRepl(createContext = () => ({}), socketPath = replSocketPath()) {
+export function startRepl(createContext = () => ({}), socketPath = replSocketPath(), options = {}) {
 	fs.mkdirSync(path.dirname(socketPath), { recursive: true })
 
 	const sessions = new Map()
+	let idleTimer
+	const idleTimeoutMs = options.idleTimeoutMs ?? null
+	const expireOnIdle = () => {
+		server.close()
+		fs.rmSync(socketPath, { force: true })
+		process.exit(0)
+	}
+	const keepAlive = () => {
+		if (idleTimeoutMs === null) {
+			return
+		}
+
+		clearTimeout(idleTimer)
+		idleTimer = setTimeout(expireOnIdle, idleTimeoutMs)
+	}
 	const api = {
 		new() {
 			const id = randomUUID().slice(0, 8)
@@ -122,11 +142,14 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 	}
 
 	const server = net.createServer((socket) => {
+		keepAlive()
+
 		let buffer = ''
 		let timer
 		let responded = false
 
 		socket.on('data', (chunk) => {
+			keepAlive()
 			buffer += chunk
 			clearTimeout(timer)
 			timer = setTimeout(respond, 5)
@@ -154,6 +177,7 @@ export function startRepl(createContext = () => ({}), socketPath = replSocketPat
 	})
 
 	server.listen(socketPath)
+	keepAlive()
 	return server
 }
 
