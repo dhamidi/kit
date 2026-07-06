@@ -4,7 +4,7 @@ import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
 import { createFileEnv } from '../file_env.js'
 import { kit } from '../index.js'
-import { isSchemaFieldVisibleInCLI } from '../schema_args.js'
+import { schemaCLIOptionEntries } from '../schema_args.js'
 
 /**
  * Command for generating components through provider component types.
@@ -281,10 +281,8 @@ async function generateHelp(providerQuery, target) {
 
 function typeHelp(provider, type) {
 	const schema = type.schema()
-	const options = Object.entries(schema.properties ?? {}).filter(
-		([, property]) => isSchemaFieldVisibleInCLI(property),
-	)
-	const width = Math.max('--help'.length, ...options.map(([name]) => `--${name} <value>`.length))
+	const options = schemaCLIOptionEntries(schema)
+	const width = Math.max('--help'.length, ...options.map((option) => optionUsage(option).length))
 
 	return [
 		`Usage: kit generate ${provider.name()} ${type.id()} [options]`,
@@ -292,8 +290,8 @@ function typeHelp(provider, type) {
 		type.description(),
 		'',
 		'Options:',
-		...options.map(([name, property]) => {
-			return `  ${`--${name} <value>`.padEnd(width)}  ${property.description ?? ''}`
+		...options.map((option) => {
+			return `  ${optionUsage(option).padEnd(width)}  ${option.description}`
 		}),
 		`  ${'--intent <text>'.padEnd(width)}  Extra planning context for follow-up agent work`,
 		`  ${'--agent <name>'.padEnd(width)}  Agent that executes the follow-up plan (default: amp)`,
@@ -301,6 +299,10 @@ function typeHelp(provider, type) {
 		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
 		`  ${'--help'.padEnd(width)}  Show help`,
 	].join('\n')
+}
+
+function optionUsage(option) {
+	return `--${option.name} ${option.value}`
 }
 
 function typeWidth(types) {

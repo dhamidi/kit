@@ -26,7 +26,7 @@ import {
 } from './provider_discovery.js'
 import { replHistoryFile, replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
 import { repoRoot } from './repo_root.js'
-import { isSchemaFieldVisibleInCLI, parseArgsOptionsFromSchema } from './schema_args.js'
+import { isSchemaFieldVisibleInCLI, parseArgsOptionsFromSchema, schemaCLIOptionEntries } from './schema_args.js'
 import { spawn } from './spawn.js'
 import { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
@@ -58,7 +58,7 @@ export {
 } from './provider_discovery.js'
 export { replHistoryFile, replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
 export { repoRoot } from './repo_root.js'
-export { isSchemaFieldVisibleInCLI, parseArgsOptionsFromSchema } from './schema_args.js'
+export { isSchemaFieldVisibleInCLI, parseArgsOptionsFromSchema, schemaCLIOptionEntries } from './schema_args.js'
 export { spawn } from './spawn.js'
 export { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
@@ -103,6 +103,7 @@ export const kit = {
 	inspectComponent,
 	providerDiscoveryPaths,
 	parseArgsOptionsFromSchema,
+	schemaCLIOptionEntries,
 	parseArgs,
 	repoRoot,
 	replHistoryFile,
@@ -166,9 +167,10 @@ function kitDocs() {
 		discoverProviders: 'Scans provider directories, imports provider modules, and yields provider discovery/loading events.',
 		inspectComponent: 'Finds one provider-qualified component record such as kit-event.file.fileRead.',
 		providerDiscoveryPaths: 'Returns the FileURI directories Kit scans for providers from a repo root and cwd.',
-		parseArgsOptionsFromSchema: 'Converts a TypeBox object schema into node:util parseArgs options, respecting kit.cli: false fields.',
+		parseArgsOptionsFromSchema: 'Converts a TypeBox object schema into node:util parseArgs options, respecting kit.cli: false fields and schema-directed dotted nested flags.',
+		schemaCLIOptionEntries: 'Returns the schema-derived option rows used by kit generate help, including dotted nested field names.',
 		isSchemaFieldVisibleInCLI: 'Returns whether a TypeBox schema field should be exposed as a generated kit generate CLI flag. Reads kit.cli metadata.',
-		parseArgs: 'node:util parseArgs wrapper that turns parse failures into clean UserError messages.',
+		parseArgs: 'node:util parseArgs wrapper that turns parse failures into clean UserError messages and reconstructs schema-directed dotted nested flags.',
 		repoRoot: 'Runs git rev-parse --show-toplevel and returns the repository root as a FileURI. Call .path() if an API needs a native string.',
 		replHistoryFile: 'Returns the cache file that stores interactive REPL history for this workspace.',
 		replSessionFile: 'Returns the cache file that stores the current REPL session id for this workspace.',

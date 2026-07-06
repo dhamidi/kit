@@ -1,5 +1,6 @@
 import { parseArgs as nodeParseArgs } from 'node:util'
 import { CommandFormatter } from './formatters/command.js'
+import { schemaArgsMetadata } from './schema_args.js'
 
 /**
  * Parses argv like `node:util` parseArgs, but converts argument-parsing failures
@@ -11,7 +12,20 @@ import { CommandFormatter } from './formatters/command.js'
  */
 export function parseArgs(config) {
 	try {
-		return nodeParseArgs(config)
+		const metadata = config.options?.[schemaArgsMetadata]
+		const parsed = nodeParseArgs({
+			...config,
+			options: metadata?.optionsFor(config.args, config.options) ?? config.options,
+		})
+
+		if (metadata === undefined) {
+			return parsed
+		}
+
+		return {
+			...parsed,
+			values: metadata.normalizeValues(parsed.values),
+		}
 	} catch (error) {
 		if (typeof error?.code === 'string' && error.code.startsWith('ERR_PARSE_ARGS_')) {
 			throw new UserError(parseErrorMessage(error))
