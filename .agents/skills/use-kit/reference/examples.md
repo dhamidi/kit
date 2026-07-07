@@ -57,7 +57,7 @@ bun run kit manifest plan greet.kit
 #   Finish generated greet command
 # Steps:
 #     1. fill-in-command
-#      Use Amp to finish generated command implementation
+#      Use the configured agent to finish generated command implementation
 #      Files: file:///…/src/commands/greet.js
 
 bun run kit manifest apply greet.kit
@@ -162,7 +162,7 @@ bun run kit plan show 2d9cf02e-…
 # Status: running
 # Steps:
 #   → 1. fill-in-command
-#      Use Amp to finish generated command implementation
+#      Use the configured agent to finish generated command implementation
 #      Files: file:src/commands/manifest.js
 
 bun run kit plan clear   # drop completed cached plans

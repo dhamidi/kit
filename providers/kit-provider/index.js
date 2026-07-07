@@ -101,7 +101,7 @@ class KitProviderType {
 				},
 				{
 					id: 'fill-in-provider',
-					instructions: 'Use Amp to finish generated provider implementation',
+					instructions: 'Use the configured agent to finish generated provider implementation',
 					files: [path],
 					agent: {
 						prompt: providerPrompt(spec, path),

@@ -311,7 +311,7 @@ function runnerPlanSteps(spec, className) {
 	const steps = [
 		{
 			id: 'implement-runner',
-			instructions: `Use Amp to implement the ${className} agent runner in ${AGENT_RUNNER_FILE}`,
+			instructions: `Use the configured agent to implement the ${className} agent runner in ${AGENT_RUNNER_FILE}`,
 			files: [AGENT_RUNNER_FILE],
 			agent: {
 				prompt: runnerPrompt(spec, className),

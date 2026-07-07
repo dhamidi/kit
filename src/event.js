@@ -1,5 +1,12 @@
 import { Value } from '@sinclair/typebox/value'
 import {
+	agentAvailableEvent,
+	agentDiscoveredEvent,
+	agentSchemas,
+	agentSelectedEvent,
+	agentUnavailableEvent,
+} from './events/agent.js'
+import {
 	commandExitedEvent,
 	commandOutputEvent,
 	commandSchemas,
@@ -31,6 +38,7 @@ export class Event {
 		...providerSchemas,
 		...componentSchemas,
 		...commandSchemas,
+		...agentSchemas,
 	}
 
 	static fileCreated(path) {
@@ -93,6 +101,22 @@ export class Event {
 
 	static commandExited(command, code) {
 		return Event.from(Event.schemas.commandExited, commandExitedEvent(command, code))
+	}
+
+	static agentDiscovered(agent) {
+		return Event.from(Event.schemas.agentDiscovered, agentDiscoveredEvent(agent))
+	}
+
+	static agentAvailable(agent, path) {
+		return Event.from(Event.schemas.agentAvailable, agentAvailableEvent(agent, path))
+	}
+
+	static agentUnavailable(agent, reason) {
+		return Event.from(Event.schemas.agentUnavailable, agentUnavailableEvent(agent, reason))
+	}
+
+	static agentSelected(agent, reason) {
+		return Event.from(Event.schemas.agentSelected, agentSelectedEvent(agent, reason))
 	}
 
 	static from(schema, value) {

@@ -61,7 +61,7 @@ class MyType {
 		if (spec.intent !== undefined) {
 			yield this.kit.Event.plan(`Implement ${spec.name}`, [{
 				id: 'implement',
-				instructions: `Use Amp to implement ${spec.name}`,
+				instructions: `Use the configured agent to implement ${spec.name}`,
 				files: [path],
 			}], { intent: spec.intent })
 		}
@@ -145,7 +145,7 @@ processes. Do not sniff method arity to detect dry-run; read `env.dryRun`.
 ```js
 {
 	id: 'implement-component',            // optional step id (used to namespace agent output)
-	instructions: 'Use Amp to implement …',
+	instructions: 'Use the configured agent to implement …',
 	files: ['file:///abs/path.js'],       // optional; FileURI-normalized automatically
 	agent: {                              // optional; presence means "run an agent for this step"
 		prompt: 'Full self-contained instructions for the agent',

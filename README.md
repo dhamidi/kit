@@ -88,7 +88,7 @@ Kit will then happily bootstrap all of the parts that are easy:
 - wire up imports,
 - register the new commands, etc.
 
-And then it uses the intent to spawn an agent (by default: [amp](https://ampcode.com)),
+And then it uses the intent to spawn the first available agent (preferring [amp](https://ampcode.com), then Claude),
 to *fill in the blanks*: make the command actually do the work it needs to do, based
 on the provided intent.
 

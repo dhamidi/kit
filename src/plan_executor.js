@@ -20,8 +20,9 @@ export class PlanExecutor {
 		// An explicitly injected runner (e.g. in tests) wins over the named agent
 		// and is never rebuilt on resume.
 		this.explicitRunner = agentRunner !== undefined
-		this.agent = agent
-		this.agentRunner = agentRunner ?? createAgentRunner(agent)
+		this.requestedAgent = agent
+		this.agent = agent ?? DEFAULT_AGENT
+		this.agentRunner = agentRunner
 		this.formatter = formatter
 		this.stateStore = stateStore
 		this.shell = shell
@@ -34,16 +35,21 @@ export class PlanExecutor {
 	 * Used by resume so a plan continues with the agent it was started with,
 	 * because thread IDs are agent-specific and cannot be handed to another CLI.
 	 */
-	useAgent(name) {
+	async useAgent(name) {
 		if (this.explicitRunner) {
 			return
 		}
 
-		this.agent = name
-		this.agentRunner = createAgentRunner(name)
+		const agent = await createAgentRunner(name)
+		this.agent = agent.name
+		this.agentRunner = agent.runner
 	}
 
 	async execute(plan) {
+		if (usesAgentSteps(plan.steps)) {
+			await this.useAgent(this.requestedAgent)
+		}
+
 		const state = {
 			id: plan.id ?? crypto.randomUUID(),
 			status: 'running',
@@ -80,8 +86,26 @@ export class PlanExecutor {
 			return
 		}
 
-		this.useAgent(state.agent ?? DEFAULT_AGENT)
-		state.agent = this.agent
+		if (usesAgentSteps(state.steps)) {
+			try {
+				await this.useAgent(state.agent ?? DEFAULT_AGENT)
+			} catch (error) {
+				if (error instanceof UserError && state.agent !== undefined && state.agent !== DEFAULT_AGENT) {
+					throw new UserError([
+						`Plan ${id} was started with ${state.agent}, but that agent is not available.`,
+						'',
+						error.message,
+						'',
+						'Thread IDs are agent-specific, so Kit cannot safely switch this plan to another agent.',
+					].join('\n'))
+				}
+
+				throw error
+			}
+
+			state.agent = this.agent
+		}
+
 		state.status = 'running'
 		await this.drive(state)
 	}
@@ -157,6 +181,8 @@ export class PlanExecutor {
 	}
 
 	async runAgentStep(step, state) {
+		await this.ensureAgentRunner()
+
 		let lastOutput = state.lastOutput
 		let threadID = step.agent.threadID
 		const events =
@@ -246,6 +272,14 @@ export class PlanExecutor {
 			output: new TextDecoder().decode(join(chunks)),
 		}
 	}
+
+	async ensureAgentRunner() {
+		if (this.agentRunner !== undefined) {
+			return
+		}
+
+		await this.useAgent(this.requestedAgent)
+	}
 }
 
 function join(chunks) {
@@ -259,6 +293,10 @@ function join(chunks) {
 	}
 
 	return bytes
+}
+
+function usesAgentSteps(steps = []) {
+	return steps.some((step) => step.agent !== undefined)
 }
 
 function verificationFailure(step) {

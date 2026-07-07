@@ -86,7 +86,7 @@ class KitTaskType {
 			[
 				{
 					id: spec.name,
-					instructions: `Use Amp to complete task ${spec.name}`,
+					instructions: `Use the configured agent to complete task ${spec.name}`,
 					files: spec.file ?? [],
 					agent: {
 						prompt: taskPrompt(spec),

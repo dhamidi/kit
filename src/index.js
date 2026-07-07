@@ -1,5 +1,14 @@
 import { Type } from '@sinclair/typebox'
-import { AgentRunner, AmpAgentRunner } from './agent_runner.js'
+import {
+	AgentRunner,
+	AmpAgentRunner,
+	ClaudeAgentRunner,
+	agentNames,
+	availableAgents,
+	createAgentRunner,
+	discoverAgents,
+	selectAgent,
+} from './agent_runner.js'
 import { CLI, Command, createCLI, defineCommand, parseArgs, UserError } from './cli.js'
 import { Component } from './component.js'
 import { Identifier } from './component_identifier.js'
@@ -37,7 +46,16 @@ import {
 import { spawn } from './spawn.js'
 import { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
-export { AgentRunner, AmpAgentRunner } from './agent_runner.js'
+export {
+	AgentRunner,
+	AmpAgentRunner,
+	ClaudeAgentRunner,
+	agentNames,
+	availableAgents,
+	createAgentRunner,
+	discoverAgents,
+	selectAgent,
+} from './agent_runner.js'
 export { parseAgentLine, parseAgentMessage } from './agents.js'
 export { CLI, Command, createCLI, defineCommand, parseArgs, UserError } from './cli.js'
 export { Component } from './component.js'
@@ -85,6 +103,12 @@ export const kit = {
 	Type,
 	AgentRunner,
 	AmpAgentRunner,
+	ClaudeAgentRunner,
+	agentNames,
+	availableAgents,
+	createAgentRunner,
+	discoverAgents,
+	selectAgent,
 	CLI,
 	Command,
 	UserError,
@@ -153,7 +177,13 @@ function kitDocs() {
 	return {
 		Type: 'TypeBox schema builder re-export. Use it for provider schemas and runtime boundaries so Kit can generate CLI help and manifest vocabulary.',
 		AgentRunner: 'Base class for plan agent executors. Subclass this when adding a new agent CLI integration.',
-		AmpAgentRunner: 'AgentRunner implementation for the Amp CLI. This is the default plan executor runner.',
+		AmpAgentRunner: 'AgentRunner implementation for the Amp CLI.',
+		ClaudeAgentRunner: 'AgentRunner implementation for the Claude Code CLI.',
+		agentNames: 'Returns supported agent names in default selection order.',
+		availableAgents: 'Returns installed supported agents by consuming agent discovery events.',
+		createAgentRunner: 'Resolves an agent name or auto selection and returns the concrete runner plus selected name.',
+		discoverAgents: 'Yields agent discovery events describing supported plan execution agents and PATH availability.',
+		selectAgent: 'Resolves an explicit or auto agent request to one installed supported agent.',
 		CLI: 'Small command dispatcher used by Kit itself. Useful if a provider or plugin needs Kit-style commands and help output.',
 		Command: 'Value object for one CLI command, including options, subcommands, parsing, and execution.',
 		UserError: 'Throw this for user-facing failures. Kit prints the message without a stack trace.',
@@ -214,6 +244,12 @@ function documentCoreClasses() {
 		instance: {
 			start: 'Starts a new Amp thread with --stream-json and returns Kit command events. Used by PlanExecutor for new agent steps.',
 			continue: 'Continues an existing Amp thread id with a new prompt and returns Kit command events. Used when resuming agent work.',
+		},
+	})
+	Introspectable.document(ClaudeAgentRunner, {
+		instance: {
+			start: 'Starts a new Claude Code session with stream-json output and returns Kit command events. Used by PlanExecutor for new agent steps.',
+			continue: 'Resumes an existing Claude Code session id with a new prompt and returns Kit command events. Used when resuming agent work.',
 		},
 	})
 	Introspectable.document(CLI, {

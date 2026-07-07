@@ -87,7 +87,7 @@ manifest.command(defineCommand({
 	options: {
 		json: { type: 'boolean', description: 'Print provider events as JSON lines' },
 		'skip-plans': { type: 'boolean', description: 'Skip provider follow-up plans (executed by default)' },
-		agent: { type: 'string', description: 'Agent that executes follow-up plans (default: amp)' },
+		agent: { type: 'string', description: 'Agent that executes follow-up plans (default: auto)' },
 	},
 	async run({ parsed }) {
 		const execution = await ManifestExecution.from(parsed)

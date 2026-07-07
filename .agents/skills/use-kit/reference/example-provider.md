@@ -187,7 +187,7 @@ class KitCommandType {
 				[
 					{
 						id: 'fill-in-command',
-						instructions: 'Use Amp to finish generated command implementation',
+						instructions: 'Use the configured agent to finish generated command implementation',
 						files: ['src/commands/components.js'],
 						agent: {
 							prompt: componentShowPrompt(spec),
@@ -215,7 +215,7 @@ class KitCommandType {
 			[
 				{
 					id: 'fill-in-command',
-					instructions: 'Use Amp to finish generated command implementation',
+					instructions: 'Use the configured agent to finish generated command implementation',
 					files: [path],
 					agent: {
 						prompt: commandPrompt(spec, path),

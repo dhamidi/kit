@@ -270,7 +270,7 @@ async function generateHelp(providerQuery, target) {
 			'',
 			'Global options:',
 			'  --intent <text>   Extra planning context for follow-up agent work',
-			'  --agent <name>    Agent that executes the follow-up plan (default: amp)',
+			'  --agent <name>    Agent that executes the follow-up plan (default: auto)',
 			'  -n, --dry-run     List generated files and print the final plan without writing or executing it',
 			'  --json            Output one JSON object per event',
 			'  --help            Show help',
@@ -301,7 +301,7 @@ function typeHelp(provider, type) {
 			return `  ${optionUsage(option).padEnd(width)}  ${option.description}`
 		}),
 		`  ${'--intent <text>'.padEnd(width)}  Extra planning context for follow-up agent work`,
-		`  ${'--agent <name>'.padEnd(width)}  Agent that executes the follow-up plan (default: amp)`,
+		`  ${'--agent <name>'.padEnd(width)}  Agent that executes the follow-up plan (default: auto)`,
 		`  ${'-n, --dry-run'.padEnd(width)}  List generated files and print the final plan without writing or executing it`,
 		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
 		`  ${'--help'.padEnd(width)}  Show help`,
