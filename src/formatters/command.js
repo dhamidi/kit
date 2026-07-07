@@ -1,4 +1,5 @@
 import { Identifier } from '../component_identifier.js'
+import { schemaCLIOptionEntries, schemaHasCLIArrayField } from '../schema_args.js'
 import { PlanFormatter } from './plan.js'
 import { TableFormatter } from './table.js'
 
@@ -212,11 +213,35 @@ function writeSchema(schema, output) {
 	if (schema.properties !== undefined) {
 		writeMetadata(schema, output, '')
 		writeObjectFields('Fields', schema, output, '')
+		writeSchemaCLIOptions(schema, output)
 		return
 	}
 
 	output.write(`Schema: ${schemaTypeName(schema)}\n`)
 	writeMetadata(schema, output, '  ')
+}
+
+function writeSchemaCLIOptions(schema, output) {
+	const entries = schemaCLIOptionEntries(schema)
+
+	if (entries.length === 0) {
+		return
+	}
+
+	const width = Math.max(...entries.map((entry) => schemaOptionUsage(entry).length))
+	output.write('Generate flags:\n')
+
+	for (const entry of entries) {
+		output.write(`  ${schemaOptionUsage(entry).padEnd(width)}  ${entry.description}\n`)
+	}
+
+	if (schemaHasCLIArrayField(schema)) {
+		output.write('  Array syntax: --field.0 <value>; arrays of objects use --field.0.name <value>\n')
+	}
+}
+
+function schemaOptionUsage(entry) {
+	return `--${entry.name} ${entry.value}`
 }
 
 function writeObjectFields(title, schema, output, indent) {

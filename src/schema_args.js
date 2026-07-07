@@ -1,3 +1,5 @@
+import { parseArgs as nodeParseArgs } from 'node:util'
+
 export const schemaArgsMetadata = Symbol('kit.schemaArgsMetadata')
 
 /**
@@ -24,6 +26,69 @@ export function parseArgsOptionsFromSchema(schema) {
 }
 
 /**
+ * Parses argv against a TypeBox object schema using Kit's schema-derived CLI
+ * rules. Useful in the REPL for checking exactly what a provider schema accepts.
+ *
+ * @example
+ * const schema = kit.Type.Object({ tags: kit.Type.Array(kit.Type.String()) })
+ * parseSchemaArgs(schema, ['--tags.0', 'one']).values // { tags: ['one'] }
+ */
+export function parseSchemaArgs(schema, argv = [], config = {}) {
+	const options = parseArgsOptionsFromSchema(schema)
+	const metadata = options[schemaArgsMetadata]
+	let parsed
+
+	try {
+		parsed = nodeParseArgs({
+			...config,
+			args: argv,
+			options: metadata.optionsFor(argv, options),
+		})
+	} catch (error) {
+		if (typeof error?.code === 'string' && error.code.startsWith('ERR_PARSE_ARGS_')) {
+			throw new Error(schemaArgsErrorMessage(error, metadata))
+		}
+
+		throw error
+	}
+
+	return {
+		...parsed,
+		values: metadata.normalizeValues(parsed.values),
+	}
+}
+
+function schemaArgsErrorMessage(error, metadata) {
+	const message = error.message.replace(/\.\s+To specify a positional argument[\s\S]*$/, '.')
+	const hint = metadata.hintForError(message)
+
+	return hint === undefined ? message : `${message}\n${hint}`
+}
+
+/**
+ * Converts a value object for a TypeBox schema into argv accepted by
+ * parseSchemaArgs(). Arrays use zero-based dotted indexes so the generated argv
+ * shows the same syntax users can pass to `kit generate`.
+ *
+ * @example
+ * const schema = kit.Type.Object({ tags: kit.Type.Array(kit.Type.String()) })
+ * argvFromSchemaValues(schema, { tags: ['one'] }) // ['--tags.0', 'one']
+ */
+export function argvFromSchemaValues(schema, values = {}) {
+	const argv = []
+
+	for (const [name, property] of Object.entries(schema.properties ?? {})) {
+		if (!isSchemaFieldVisibleInCLI(property) || values[name] === undefined) {
+			continue
+		}
+
+		pushArgvValue(argv, [name], property, values[name])
+	}
+
+	return argv
+}
+
+/**
  * Returns whether a TypeBox schema field should be exposed as a generated CLI flag.
  */
 export function isSchemaFieldVisibleInCLI(property) {
@@ -43,9 +108,18 @@ export function schemaCLIOptionEntries(schema) {
 	})
 }
 
+/**
+ * Returns true when schema-derived CLI options need array syntax guidance.
+ */
+export function schemaHasCLIArrayField(schema) {
+	return Object.entries(schema.properties ?? {}).some(([, property]) => {
+		return isSchemaFieldVisibleInCLI(property) && hasArrayField(property)
+	})
+}
+
 function parseArgOption(property) {
 	const option = {
-		type: parseArgType(scalarSchema(property)),
+		type: 'string',
 	}
 
 	if (property.multiple === true || property.type === 'array') {
@@ -53,14 +127,6 @@ function parseArgOption(property) {
 	}
 
 	return option
-}
-
-function parseArgType(property) {
-	if (property.type === 'boolean') {
-		return 'boolean'
-	}
-
-	return 'string'
 }
 
 function isStaticCLIOption(property) {
@@ -99,6 +165,20 @@ function cliOptionEntries(name, schema) {
 	return [{ name, value: valueName(schema), description: schema.description ?? '' }]
 }
 
+function hasArrayField(schema) {
+	if (schema.type === 'array') {
+		return true
+	}
+
+	if (schema.type === 'object') {
+		return Object.entries(schema.properties ?? {}).some(([, property]) => {
+			return isSchemaFieldVisibleInCLI(property) && hasArrayField(property)
+		})
+	}
+
+	return false
+}
+
 function valueName(schema) {
 	const scalar = scalarSchema(schema)
 
@@ -132,7 +212,7 @@ class SchemaArgsMetadata {
 				continue
 			}
 
-			next[name] = { type: 'string' }
+			next[name] = parseArgOption(field.schema)
 		}
 
 		return next
@@ -175,6 +255,98 @@ class SchemaArgsMetadata {
 
 		return resolvePath(property, path)
 	}
+
+	hintForError(message) {
+		const option = message.match(/Unknown option '--([^']+)'/)?.[1]
+
+		if (option === undefined || !option.includes('.')) {
+			return undefined
+		}
+
+		return optionHint(this.schema, option)
+	}
+}
+
+function optionHint(schema, option) {
+	const path = option.split('.')
+	let current = schema.properties?.[path[0]]
+	const prefix = [path[0]]
+
+	if (current === undefined || !isSchemaFieldVisibleInCLI(current)) {
+		return undefined
+	}
+
+	for (const part of path.slice(1)) {
+		if (current.type === 'array') {
+			if (!isArrayIndex(part)) {
+				return `Array field '${prefix.join('.')}' needs a zero-based numeric index. Try --${[
+					...prefix,
+					0,
+					...examplePath(current.items),
+				].join('.')} <value>.`
+			}
+
+			prefix.push(part)
+			current = current.items
+			continue
+		}
+
+		if (current.type !== 'object') {
+			return undefined
+		}
+
+		current = current.properties?.[part]
+
+		if (current === undefined || !isSchemaFieldVisibleInCLI(current)) {
+			return undefined
+		}
+
+		prefix.push(part)
+	}
+
+	return undefined
+}
+
+function examplePath(schema) {
+	if (schema.type === 'array') {
+		return [0, ...examplePath(schema.items)]
+	}
+
+	if (schema.type === 'object') {
+		const field = Object.entries(schema.properties ?? {}).find(([, property]) => {
+			return isSchemaFieldVisibleInCLI(property)
+		})
+
+		return field === undefined ? [] : [field[0], ...examplePath(field[1])]
+	}
+
+	return []
+}
+
+function pushArgvValue(argv, path, schema, value) {
+	if (schema.type === 'array') {
+		const values = Array.isArray(value) ? value : [value]
+
+		for (const [index, item] of values.entries()) {
+			pushArgvValue(argv, [...path, index], schema.items, item)
+		}
+
+		return
+	}
+
+	if (schema.type === 'object') {
+		for (const [name, property] of Object.entries(schema.properties ?? {})) {
+			if (!isSchemaFieldVisibleInCLI(property) || value?.[name] === undefined) {
+				continue
+			}
+
+			pushArgvValue(argv, [...path, name], property, value[name])
+		}
+
+		return
+	}
+
+	argv.push(`--${path.join('.')}`, String(value))
 }
 
 function optionNames(args) {
@@ -220,7 +392,9 @@ function resolvePath(schema, path) {
 		resolved.push(part)
 	}
 
-	return isScalarSchema(current) ? { path: resolved, schema: current } : undefined
+	return isScalarSchema(current) || isArrayOfScalars(current)
+		? { path: resolved, schema: current }
+		: undefined
 }
 
 function isArrayIndex(value) {
@@ -229,6 +403,10 @@ function isArrayIndex(value) {
 
 function isScalarSchema(schema) {
 	return schema.type !== 'object' && schema.type !== 'array'
+}
+
+function isArrayOfScalars(schema) {
+	return schema.type === 'array' && isScalarSchema(schema.items)
 }
 
 function assignPath(target, path, value) {

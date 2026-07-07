@@ -4,7 +4,7 @@ import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
 import { createFileEnv } from '../file_env.js'
 import { kit } from '../index.js'
-import { schemaCLIOptionEntries } from '../schema_args.js'
+import { schemaCLIOptionEntries, schemaHasCLIArrayField } from '../schema_args.js'
 
 /**
  * Command for generating components through provider component types.
@@ -239,6 +239,10 @@ async function generateHelp(providerQuery, target) {
 			'',
 			'Generate a component using a provider.',
 			'',
+			'Examples:',
+			'  kit generate <provider> <component-type> --help',
+			'  kit generate kit task.inject-secret-files --file.0 thread-actors/src/sandbox/manager.ts',
+			'',
 			'Providers:',
 			...providers.map((provider) => `  ${provider.name()}`),
 		].join('\n')
@@ -257,6 +261,9 @@ async function generateHelp(providerQuery, target) {
 			`Usage: kit generate ${provider.name()} <component-type> [options]`,
 			'',
 			`Generate components with ${provider.name()}.`,
+			'',
+			'Examples:',
+			`  kit generate ${provider.name()} <component-type> --help`,
 			'',
 			'Component types:',
 			...types.map((type) => `  ${type.id().padEnd(typeWidth(types))}  ${type.description()}`),
@@ -298,7 +305,142 @@ function typeHelp(provider, type) {
 		`  ${'-n, --dry-run'.padEnd(width)}  List generated files and print the final plan without writing or executing it`,
 		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
 		`  ${'--help'.padEnd(width)}  Show help`,
+		...schemaExamples(provider, type, schema),
+		...schemaOptionNotes(schema),
 	].join('\n')
+}
+
+function schemaExamples(provider, type, schema) {
+	const values = schemaExampleValues(schema)
+	const argv = kit.argvFromSchemaValues(schema, values)
+	const command = [
+		'kit',
+		'generate',
+		provider.name(),
+		exampleTarget(type, schema),
+		...argv,
+	]
+
+	return [
+		'',
+		'Examples:',
+		`  ${command.map(shellQuote).join(' ')}`,
+	]
+}
+
+function exampleTarget(type, schema) {
+	const name = schema.properties?.name
+
+	if (name !== undefined && !kit.isSchemaFieldVisibleInCLI(name)) {
+		return `${type.id()}.${exampleValue(name)}`
+	}
+
+	return type.id()
+}
+
+function schemaExampleValues(schema) {
+	const values = {}
+	const required = new Set(schema.required ?? [])
+
+	for (const [name, property] of Object.entries(schema.properties ?? {})) {
+		if (!kit.isSchemaFieldVisibleInCLI(property)) {
+			continue
+		}
+
+		if (!required.has(name) && !hasSchemaExample(property)) {
+			continue
+		}
+
+		values[name] = exampleValue(property)
+	}
+
+	return values
+}
+
+function hasSchemaExample(schema) {
+	if (schema.examples?.[0] !== undefined || schema.default !== undefined || schema.const !== undefined) {
+		return true
+	}
+
+	if (schema.anyOf !== undefined) {
+		return schema.anyOf.some(hasSchemaExample)
+	}
+
+	if (schema.type === 'array') {
+		return hasSchemaExample(schema.items)
+	}
+
+	if (schema.type === 'object') {
+		return Object.entries(schema.properties ?? {}).some(([, property]) => {
+			return kit.isSchemaFieldVisibleInCLI(property) && hasSchemaExample(property)
+		})
+	}
+
+	return false
+}
+
+function exampleValue(schema) {
+	if (schema.examples?.[0] !== undefined) {
+		return schema.examples[0]
+	}
+
+	if (schema.default !== undefined) {
+		return schema.default
+	}
+
+	if (schema.const !== undefined) {
+		return schema.const
+	}
+
+	if (schema.anyOf !== undefined) {
+		return exampleValue(schema.anyOf[0])
+	}
+
+	if (schema.type === 'array') {
+		return [exampleValue(schema.items)]
+	}
+
+	if (schema.type === 'object') {
+		return schemaExampleValues(schema)
+	}
+
+	if (schema.type === 'boolean') {
+		return false
+	}
+
+	if (schema.type === 'number' || schema.type === 'integer') {
+		return 1
+	}
+
+	return 'example'
+}
+
+function shellQuote(value) {
+	const text = String(value)
+
+	if (/^[A-Za-z0-9_./:=@+-]+$/.test(text)) {
+		return text
+	}
+
+	return `'${text.replaceAll("'", "'\\''")}'`
+}
+
+function schemaOptionNotes(schema) {
+	if (!schemaHasCLIArrayField(schema)) {
+		return []
+	}
+
+	return [
+		'',
+		'Array syntax:',
+		'  Use zero-based dotted indexes for specific array items: --field.0 <value>',
+		'  For arrays of objects, put the index before the object field: --field.0.name <value>',
+		'  Scalar arrays also accept repeated flags: --field <value> --field <value>',
+		'',
+		'RePL round trip:',
+		'  kit.parseSchemaArgs(schema, argv).values',
+		'  kit.argvFromSchemaValues(schema, values)',
+	]
 }
 
 function optionUsage(option) {

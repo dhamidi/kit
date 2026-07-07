@@ -11,8 +11,9 @@ import { schemaArgsMetadata } from './schema_args.js'
  * parseArgs({ args: ['--nope'], options: {}, strict: true }) // throws UserError
  */
 export function parseArgs(config) {
+	const metadata = config.options?.[schemaArgsMetadata]
+
 	try {
-		const metadata = config.options?.[schemaArgsMetadata]
 		const parsed = nodeParseArgs({
 			...config,
 			options: metadata?.optionsFor(config.args, config.options) ?? config.options,
@@ -28,15 +29,18 @@ export function parseArgs(config) {
 		}
 	} catch (error) {
 		if (typeof error?.code === 'string' && error.code.startsWith('ERR_PARSE_ARGS_')) {
-			throw new UserError(parseErrorMessage(error))
+			throw new UserError(parseErrorMessage(error, metadata))
 		}
 
 		throw error
 	}
 }
 
-function parseErrorMessage(error) {
-	return error.message.replace(/\.\s+To specify a positional argument[\s\S]*$/, '.')
+function parseErrorMessage(error, metadata) {
+	const message = error.message.replace(/\.\s+To specify a positional argument[\s\S]*$/, '.')
+	const hint = metadata?.hintForError?.(message)
+
+	return hint === undefined ? message : `${message}\n${hint}`
 }
 
 /**

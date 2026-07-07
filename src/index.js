@@ -26,7 +26,14 @@ import {
 } from './provider_discovery.js'
 import { replHistoryFile, replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
 import { repoRoot } from './repo_root.js'
-import { isSchemaFieldVisibleInCLI, parseArgsOptionsFromSchema, schemaCLIOptionEntries } from './schema_args.js'
+import {
+	argvFromSchemaValues,
+	isSchemaFieldVisibleInCLI,
+	parseArgsOptionsFromSchema,
+	parseSchemaArgs,
+	schemaCLIOptionEntries,
+	schemaHasCLIArrayField,
+} from './schema_args.js'
 import { spawn } from './spawn.js'
 import { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
@@ -58,7 +65,14 @@ export {
 } from './provider_discovery.js'
 export { replHistoryFile, replSessionFile, replSocketPath, replStateDirectory, startRepl } from './repl.js'
 export { repoRoot } from './repo_root.js'
-export { isSchemaFieldVisibleInCLI, parseArgsOptionsFromSchema, schemaCLIOptionEntries } from './schema_args.js'
+export {
+	argvFromSchemaValues,
+	isSchemaFieldVisibleInCLI,
+	parseArgsOptionsFromSchema,
+	parseSchemaArgs,
+	schemaCLIOptionEntries,
+	schemaHasCLIArrayField,
+} from './schema_args.js'
 export { spawn } from './spawn.js'
 export { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
@@ -102,8 +116,12 @@ export const kit = {
 	discoverProviders,
 	inspectComponent,
 	providerDiscoveryPaths,
+	argvFromSchemaValues,
+	isSchemaFieldVisibleInCLI,
 	parseArgsOptionsFromSchema,
+	parseSchemaArgs,
 	schemaCLIOptionEntries,
+	schemaHasCLIArrayField,
 	parseArgs,
 	repoRoot,
 	replHistoryFile,
@@ -167,8 +185,11 @@ function kitDocs() {
 		discoverProviders: 'Scans provider directories, imports provider modules, and yields provider discovery/loading events.',
 		inspectComponent: 'Finds one provider-qualified component record such as kit-event.file.fileRead.',
 		providerDiscoveryPaths: 'Returns the FileURI directories Kit scans for providers from a repo root and cwd.',
+		argvFromSchemaValues: 'Converts TypeBox schema values into argv for schema-derived provider options. Arrays use zero-based dotted indexes such as --files.0.path value.',
 		parseArgsOptionsFromSchema: 'Converts a TypeBox object schema into node:util parseArgs options, respecting kit.cli: false fields and schema-directed dotted nested flags.',
+		parseSchemaArgs: 'Parses argv against a TypeBox object schema and returns normalized values. Use with argvFromSchemaValues in the REPL to test schema/argv round trips.',
 		schemaCLIOptionEntries: 'Returns the schema-derived option rows used by kit generate help, including dotted nested field names.',
+		schemaHasCLIArrayField: 'Returns true when schema-derived CLI help should include array index syntax guidance.',
 		isSchemaFieldVisibleInCLI: 'Returns whether a TypeBox schema field should be exposed as a generated kit generate CLI flag. Reads kit.cli metadata.',
 		parseArgs: 'node:util parseArgs wrapper that turns parse failures into clean UserError messages and reconstructs schema-directed dotted nested flags.',
 		repoRoot: 'Runs git rev-parse --show-toplevel and returns the repository root as a FileURI. Call .path() if an API needs a native string.',
