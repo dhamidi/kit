@@ -1,4 +1,8 @@
-import { Type } from '@sinclair/typebox'
+import {
+	schemaAliases,
+	schemaWithKitFields,
+	shorthandTarget,
+} from '../schema_normalizer.js'
 
 /**
  * ManifestResolver turns parsed syntax into provider-backed operations with real spec values.
@@ -110,7 +114,7 @@ class MissingVocabularyEntry {
 
 class ObjectValue {
 	constructor(schema, body, owner) {
-		this.schema = schemaWithManifestFields(schema)
+		this.schema = schemaWithKitFields(schema)
 		this.body = body
 		this.owner = owner
 	}
@@ -121,7 +125,8 @@ class ObjectValue {
 		const statements = groupStatements(this.body.statements ?? [])
 
 		for (const statement of statements.values()) {
-			const property = this.schema.properties?.[statement.name]
+			const field = manifestField(this.schema, statement.name)
+			const property = field?.schema
 
 			if (property === undefined) {
 				errors.push(manifestError(statement.node, `Unknown field: ${statement.name}`))
@@ -133,7 +138,7 @@ class ObjectValue {
 			if (result.errors.length > 0) {
 				errors.push(...result.errors)
 			} else if (result.value !== undefined) {
-				spec[statement.name] = result.value
+				spec[field.name === statement.name ? statement.name : field.name] = result.value
 			}
 		}
 
@@ -255,6 +260,13 @@ class SchemaValue {
 
 	objectValue() {
 		if (this.node.kind !== 'BracedValue') {
+			const target = shorthandTarget(this.schema)
+
+			if (target !== undefined) {
+				const targetSchema = schemaAtPath(this.schema, target.split('.'))
+				return new SchemaValue(targetSchema ?? {}, this.node).toValue()
+			}
+
 			return ResolvedManifestValue.error(this.node, 'Expected object block')
 		}
 
@@ -328,23 +340,43 @@ function isArraySchema(schema) {
 	return schema.type === 'array'
 }
 
-function schemaWithManifestFields(schema) {
-	if (schema.type !== 'object' || schema.properties?.intent !== undefined) {
-		return schema
-	}
-
-	return {
-		...schema,
-		properties: {
-			...schema.properties,
-			intent: Type.Optional(Type.String()),
-		},
-	}
-}
-
 function manifestError(node, message) {
 	return {
 		message,
 		location: node?.start,
 	}
+}
+
+function manifestField(schema, name) {
+	const property = schema.properties?.[name]
+
+	if (property !== undefined) {
+		return { name, schema: property }
+	}
+
+	for (const [canonicalName, canonicalProperty] of Object.entries(schema.properties ?? {})) {
+		if (schemaAliases(canonicalProperty).includes(name)) {
+			return { name: canonicalName, schema: canonicalProperty }
+		}
+	}
+
+	return undefined
+}
+
+function schemaAtPath(schema, path) {
+	let current = schema
+
+	for (const part of path) {
+		if (current.type !== 'object') {
+			return undefined
+		}
+
+		current = current.properties?.[part]
+
+		if (current === undefined) {
+			return undefined
+		}
+	}
+
+	return current
 }

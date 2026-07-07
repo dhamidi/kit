@@ -1,5 +1,8 @@
-import { Type } from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
+import {
+	normalizeSchemaValue,
+	schemaViolations,
+	schemaWithKitFields,
+} from '../schema_normalizer.js'
 
 /**
  * A manifest batch knows how to move each operation through the same lifecycle.
@@ -176,6 +179,7 @@ class RunnableManifestOperation extends ProviderManifestOperation {
 	constructor(fields) {
 		super(fields)
 		this.type = fields.type
+		this.spec = normalizeSchemaValue(schemaWithKitFields(this.type.schema()), this.spec)
 		this.errors = this.validationErrors()
 	}
 
@@ -189,7 +193,7 @@ class RunnableManifestOperation extends ProviderManifestOperation {
 			]
 		}
 
-		return [...Value.Errors(schemaWithManifestFields(this.type.schema()), this.spec)].map(
+		return schemaViolations(schemaWithKitFields(this.type.schema()), this.spec).map(
 			(error) => {
 				return this.error(`${this.providerName} ${this.typeName}${error.path}: ${error.message}`, {
 					path: error.path,
@@ -354,18 +358,4 @@ function errorMessage(error) {
 
 function valueOf(value) {
 	return typeof value === 'object' && value !== null && 'value' in value ? value.value : value
-}
-
-function schemaWithManifestFields(schema) {
-	if (schema.type !== 'object' || schema.properties?.intent !== undefined) {
-		return schema
-	}
-
-	return {
-		...schema,
-		properties: {
-			...schema.properties,
-			intent: Type.Optional(Type.String()),
-		},
-	}
 }

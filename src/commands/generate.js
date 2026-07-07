@@ -1,10 +1,13 @@
-import { Type } from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
 import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
 import { createFileEnv } from '../file_env.js'
 import { kit } from '../index.js'
 import { schemaCLIOptionEntries, schemaHasCLIArrayField } from '../schema_args.js'
+import {
+	normalizeSchemaValue,
+	schemaViolations,
+	schemaWithKitFields,
+} from '../schema_normalizer.js'
 
 /**
  * Command for generating components through provider component types.
@@ -25,6 +28,7 @@ export default defineCommand({
 			json,
 			intent,
 			agent,
+			specFile,
 			help,
 			argv: providerArgv,
 		} = extractGenerateOptions(argv)
@@ -47,10 +51,12 @@ export default defineCommand({
 		const reparsed = match.candidate.type.parse(providerArgv.slice(2))
 		const rest = match.restOverride ?? match.rest
 
-		const spec = {
+		const fileSpec = specFile === undefined ? {} : await readSpecFile(specFile)
+		let spec = normalizeSchemaValue(schemaWithKitFields(match.candidate.type.schema()), {
+			...fileSpec,
 			...reparsed.values,
 			intent,
-		}
+		})
 
 		if (spec.name === undefined) {
 			spec.name = rest.parts().at(-1)
@@ -89,7 +95,7 @@ export default defineCommand({
  * assertValidSpec(provider, type, { description: 'x' }) // throws: "name is required"
  */
 function assertValidSpec(provider, type, spec) {
-	const schema = type.schema()
+	const schema = schemaWithKitFields(type.schema())
 
 	if (schema?.type !== 'object') {
 		return
@@ -116,39 +122,24 @@ function assertValidSpec(provider, type, spec) {
  * enriched with each field's schema description.
  */
 function fieldProblems(schema, spec) {
-	const specWithCommonFields = commonFieldsSchema(schema)
 	const seen = new Set()
 	const problems = []
 
-	for (const error of Value.Errors(specWithCommonFields, spec ?? {})) {
-		const field = error.path.replace(/^\//, '').split('/')[0]
+	for (const error of schemaViolations(schema, spec ?? {})) {
+		const field = error.path === '/' ? '(spec)' : error.path.replace(/^\//, '').split('/')[0]
 
-		if (field === '' || seen.has(field)) {
+		if (seen.has(field)) {
 			continue
 		}
 
 		seen.add(field)
 		const description = schema.properties?.[field]?.description
-		const missing = spec?.[field] === undefined
+		const missing = field !== '(spec)' && spec?.[field] === undefined
 		const reason = missing ? 'is required' : `is invalid (${error.message})`
 		problems.push(`${field} ${reason}${description ? ` — ${description}` : ''}`)
 	}
 
 	return problems
-}
-
-/**
- * Extends an object schema with the Kit-common `intent` field the generate
- * command adds to every spec, so it is not reported as an unknown property.
- */
-function commonFieldsSchema(schema) {
-	return {
-		...schema,
-		properties: {
-			...schema.properties,
-			intent: Type.Optional(Type.String()),
-		},
-	}
 }
 
 function writeEvent(value, { dryRun, json }) {
@@ -205,6 +196,7 @@ function extractGenerateOptions(argv) {
 	const next = []
 	let intent
 	let agent
+	let specFile
 	let dryRun = false
 	let json = false
 	let help = false
@@ -220,6 +212,9 @@ function extractGenerateOptions(argv) {
 		} else if (argv[index] === '--agent') {
 			agent = argv[index + 1]
 			index++
+		} else if (argv[index] === '--spec') {
+			specFile = argv[index + 1]
+			index++
 		} else if (argv[index] === '--help') {
 			help = true
 		} else {
@@ -227,7 +222,20 @@ function extractGenerateOptions(argv) {
 		}
 	}
 
-	return { dryRun, json, intent, agent, help, argv: next }
+	return { dryRun, json, intent, agent, specFile, help, argv: next }
+}
+
+async function readSpecFile(path) {
+	if (path === undefined) {
+		throw new UserError('--spec requires a JSON file path or -')
+	}
+
+	try {
+		const source = path === '-' ? await new Response(Bun.stdin.stream()).text() : await Bun.file(path).text()
+		return JSON.parse(source)
+	} catch (error) {
+		throw new UserError(`Cannot read --spec ${path}: ${error.message}`)
+	}
 }
 
 async function generateHelp(providerQuery, target) {
@@ -271,6 +279,7 @@ async function generateHelp(providerQuery, target) {
 			'Global options:',
 			'  --intent <text>   Extra planning context for follow-up agent work',
 			'  --agent <name>    Agent that executes the follow-up plan (default: auto)',
+			'  --spec <path|->  Read component spec JSON from a file or stdin before applying CLI overrides',
 			'  -n, --dry-run     List generated files and print the final plan without writing or executing it',
 			'  --json            Output one JSON object per event',
 			'  --help            Show help',
@@ -302,6 +311,7 @@ function typeHelp(provider, type) {
 		}),
 		`  ${'--intent <text>'.padEnd(width)}  Extra planning context for follow-up agent work`,
 		`  ${'--agent <name>'.padEnd(width)}  Agent that executes the follow-up plan (default: auto)`,
+		`  ${'--spec <path|->'.padEnd(width)}  Read component spec JSON from a file or stdin before applying CLI overrides`,
 		`  ${'-n, --dry-run'.padEnd(width)}  List generated files and print the final plan without writing or executing it`,
 		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
 		`  ${'--help'.padEnd(width)}  Show help`,

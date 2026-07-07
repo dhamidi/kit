@@ -151,8 +151,11 @@ class KitAgentComponent {
 	}
 
 	inspect() {
+		const name = runnerSpecName(this.analysis.name)
+
 		return {
-			name: this.analysis.name,
+			name,
+			command: name,
 			files: [this.analysis.path],
 			methods: this.analysis.methods,
 			interface: this.analysis.interfaceMethods,
@@ -160,6 +163,10 @@ class KitAgentComponent {
 			complete: this.analysis.complete,
 		}
 	}
+}
+
+function runnerSpecName(className) {
+	return className.replace(/AgentRunner$/, '').replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
 }
 
 /**

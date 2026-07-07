@@ -46,10 +46,14 @@ A provider should implement:
 - `create(spec, env)` — delegate to the matching type for generation.
 
 Component types should implement `id()`, `description()`, `schema()`, `parse()`,
-`describe()`, and `async *create(spec, env)`.
+`describe()`, and `async *create(spec, env)`. The type schema is the canonical
+component spec: Kit normalizes argv, manifest values, and JSON specs into that
+shape before validation and before calling `create()`.
 
 Component objects should implement `provider()`, `id()`, `description()`, and
-`inspect()`.
+`inspect()`. `inspect()` should return the same canonical spec shape advertised
+by the matching type schema so `kit component spec <component> | kit generate
+<provider> <type> --spec -` can round-trip.
 
 ## Use Kit values, not ad hoc strings
 
@@ -61,6 +65,10 @@ Component objects should implement `provider()`, `id()`, `description()`, and
   semantics.
 - Use `kit.Type` schemas with `description`; help text is generated from schema
   descriptions.
+- Use schema metadata for Kit-owned input compatibility: `kit.aliases` accepts
+  alternate field names, `kit.shorthandFor` maps scalar object shorthands to a
+  nested field, and root `kit.oneOfRequired` declares cross-field identity
+  requirements.
 
 ## Generation and events
 
@@ -125,6 +133,8 @@ Use structural tools for source-code structure.
 - Avoid spawning one process per component or per field.
 - Cache per-file discovery results during a component listing pass.
 - Keep `component list` and `component show` fast enough to run in the foreground.
+- Run `bun run kit provider test <name>` while developing a provider. Success is
+  quiet; failures print every component spec/schema violation and exit non-zero.
 
 ## Output modes
 

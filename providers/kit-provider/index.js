@@ -142,6 +142,7 @@ class KitProviderComponent {
 	inspect() {
 		return {
 			name: this.id(),
+			description: this.description(),
 			files: [this.path],
 		}
 	}

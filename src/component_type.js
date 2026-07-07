@@ -4,7 +4,7 @@
 export class ComponentType {
 	// must respond to:
 	//
-	// - schema(): returns a JSON schema (see @sinclair/typebox) describing the parameters required for creation
+	// - schema(): returns a JSON schema (see @sinclair/typebox) describing the canonical component spec accepted by create() and returned by component.inspect()
 	// - description(): returns a short description of what this component represents
-	// - create(spec, env): spec parameters as per schema, call methods on env to take actions.  Env emits events.
+	// - create(spec, env): normalized spec parameters as per schema, call methods on env to take actions.  Env emits events.
 }

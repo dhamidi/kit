@@ -43,6 +43,13 @@ import {
 	schemaCLIOptionEntries,
 	schemaHasCLIArrayField,
 } from './schema_args.js'
+import {
+	normalizeSchemaValue,
+	schemaAliases,
+	schemaViolations,
+	schemaWithKitFields,
+	shorthandTarget,
+} from './schema_normalizer.js'
 import { spawn } from './spawn.js'
 import { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
@@ -91,6 +98,13 @@ export {
 	schemaCLIOptionEntries,
 	schemaHasCLIArrayField,
 } from './schema_args.js'
+export {
+	normalizeSchemaValue,
+	schemaAliases,
+	schemaViolations,
+	schemaWithKitFields,
+	shorthandTarget,
+} from './schema_normalizer.js'
 export { spawn } from './spawn.js'
 export { EphemeralStateStore, PersistentStateStore } from './state_store.js'
 
@@ -142,10 +156,15 @@ export const kit = {
 	providerDiscoveryPaths,
 	argvFromSchemaValues,
 	isSchemaFieldVisibleInCLI,
+	normalizeSchemaValue,
 	parseArgsOptionsFromSchema,
 	parseSchemaArgs,
+	schemaAliases,
 	schemaCLIOptionEntries,
 	schemaHasCLIArrayField,
+	schemaViolations,
+	schemaWithKitFields,
+	shorthandTarget,
 	parseArgs,
 	repoRoot,
 	replHistoryFile,

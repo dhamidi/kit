@@ -4,6 +4,12 @@ import {
 	discoverComponents,
 	inspectComponent,
 } from '../provider_discovery.js'
+import { bestMatch } from '../matcher.js'
+import {
+	normalizeSchemaValue,
+	schemaViolations,
+	schemaWithKitFields,
+} from '../schema_normalizer.js'
 
 /**
  * Command group for component operations.
@@ -72,5 +78,58 @@ components.command(
 		},
 	}),
 )
+
+components.command(
+	defineCommand({
+		name: 'spec',
+		description: 'Print a discovered component as normalized schema JSON',
+		async run({ parsed }) {
+			const componentName = parsed.positionals[0]
+
+			if (componentName === undefined) {
+				throw new UserError('Usage: kit component spec <component>')
+			}
+
+			const record = await inspectComponent(componentName)
+
+			if (record === undefined) {
+				throw new UserError(`Unknown component: ${componentName}`)
+			}
+
+			const type = await componentTypeFor(record.provider, record.component)
+
+			if (type === undefined) {
+				throw new UserError(`No matching component type for ${componentName}`)
+			}
+
+			const schema = schemaWithKitFields(type.schema())
+			const spec = normalizeSchemaValue(schema, record.component.inspect())
+			const violations = schemaViolations(schema, spec)
+
+			if (violations.length > 0) {
+				throw new UserError(
+					violations.map((violation) => `${componentName}${violation.path}: ${violation.message}`).join('\n'),
+				)
+			}
+
+			console.log(JSON.stringify(spec, null, 2))
+		},
+	}),
+)
+
+async function componentTypeFor(provider, component) {
+	const types = await Array.fromAsync(provider.types())
+	const explicit = typeof component.type === 'function' ? component.type() : undefined
+
+	if (explicit !== undefined) {
+		return types.find((type) => type.id() === explicit)
+	}
+
+	if (types.length === 1) {
+		return types[0]
+	}
+
+	return bestMatch(types.map((type) => ({ id: type.id(), type })), component.id())?.candidate.type
+}
 
 export default components

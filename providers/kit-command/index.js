@@ -19,6 +19,7 @@ class KitCommandProvider {
 			const command = module.default
 
 			yield new KitCommandComponent({
+				kit: this.kit,
 				id: command.name,
 				description: command.description,
 				path,
@@ -26,6 +27,7 @@ class KitCommandProvider {
 
 			for (const child of command.commands.values()) {
 				yield new KitCommandComponent({
+					kit: this.kit,
 					id: `${command.name}.${child.name}`,
 					description: child.description,
 					path,
@@ -303,7 +305,8 @@ export default provider
 }
 
 class KitCommandComponent {
-	constructor({ id, description, path }) {
+	constructor({ kit, id, description, path }) {
+		this.kit = kit
 		this.componentID = id
 		this.componentDescription = description
 		this.path = path
@@ -322,8 +325,12 @@ class KitCommandComponent {
 	}
 
 	inspect() {
+		const parts = this.kit.Identifier.fromString(this.id()).parts()
+
 		return {
-			name: this.id(),
+			name: parts.at(-1),
+			...(parts.length > 1 ? { parent: parts[0] } : {}),
+			description: this.description(),
 			files: [this.path],
 		}
 	}

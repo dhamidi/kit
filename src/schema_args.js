@@ -1,4 +1,5 @@
 import { parseArgs as nodeParseArgs } from 'node:util'
+import { schemaAliases, shorthandTarget } from './schema_normalizer.js'
 
 export const schemaArgsMetadata = Symbol('kit.schemaArgsMetadata')
 
@@ -10,12 +11,19 @@ export const schemaArgsMetadata = Symbol('kit.schemaArgsMetadata')
  * const parsed = parseArgs({ args, options, allowPositionals: true })
  */
 export function parseArgsOptionsFromSchema(schema) {
-	const options = Object.fromEntries(
-		Object.entries(schema.properties ?? {})
-			.filter(([, property]) => isSchemaFieldVisibleInCLI(property))
-			.filter(([, property]) => isStaticCLIOption(property))
-			.map(([name, property]) => [name, parseArgOption(property)]),
-	)
+	const options = {}
+
+	for (const [name, property] of Object.entries(schema.properties ?? {})) {
+		if (!isSchemaFieldVisibleInCLI(property) || !isStaticCLIOption(property)) {
+			continue
+		}
+
+		options[name] = parseArgOption(property)
+
+		for (const alias of schemaAliases(property)) {
+			options[alias] = parseArgOption(property)
+		}
+	}
 
 	Object.defineProperty(options, schemaArgsMetadata, {
 		value: new SchemaArgsMetadata(schema),
@@ -130,7 +138,7 @@ function parseArgOption(property) {
 }
 
 function isStaticCLIOption(property) {
-	return property.type !== 'object' && !isArrayOfObjects(property)
+	return (property.type !== 'object' || shorthandTarget(property) !== undefined) && !isArrayOfObjects(property)
 }
 
 function isArrayOfObjects(property) {
@@ -247,13 +255,30 @@ class SchemaArgsMetadata {
 		}
 
 		const path = name.split('.')
-		const property = this.schema.properties?.[path[0]]
+		const root = this.rootField(path[0])
+		const property = root?.schema
 
 		if (property === undefined || !isSchemaFieldVisibleInCLI(property)) {
 			return undefined
 		}
 
-		return resolvePath(property, path)
+		return resolvePath(property, [root.name, ...path.slice(1)])
+	}
+
+	rootField(name) {
+		const property = this.schema.properties?.[name]
+
+		if (property !== undefined) {
+			return { name, schema: property }
+		}
+
+		for (const [canonicalName, canonicalProperty] of Object.entries(this.schema.properties ?? {})) {
+			if (schemaAliases(canonicalProperty).includes(name)) {
+				return { name: canonicalName, schema: canonicalProperty }
+			}
+		}
+
+		return undefined
 	}
 
 	hintForError(message) {
