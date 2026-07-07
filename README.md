@@ -26,7 +26,7 @@ It's time to bring this idea back so that our agents can reason on the same leve
 Install using mise:
 
 ```sh
-mise use -g github:dhamidi/kit@v0.2.1
+mise use -g github:dhamidi/kit@v0.3.0
 ```
 
 or [download directly](https://github.com/dhamidi/kit/releases/)
