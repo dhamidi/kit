@@ -33,6 +33,17 @@ or [download directly](https://github.com/dhamidi/kit/releases/)
 
 ## Working with kit
 
+Initialize each project before teaching Kit about its components:
+
+```sh
+kit init
+```
+
+This installs Kit's bootstrap providers (`kit-provider` and `kit-agent`) under
+`.kit/providers` and the bundled `use-kit` agent skill under
+`.agents/skills/use-kit`. If the project already has a `.claude/` directory, Kit
+also installs the same skill under `.claude/skills/use-kit`.
+
 For kit to be useful, ask your favorite agent to run kit help and build a provider 
 for a component you care about:
 

@@ -46,6 +46,14 @@ export function schemaWithKitFields(schema) {
 		properties: {
 			...schema.properties,
 			description: schema.properties?.description ?? Type.Optional(Type.String()),
+			files:
+				schema.properties?.files ??
+				Type.Optional(
+					Type.Array(
+						Type.String({ description: 'Workspace file associated with this component' }),
+						{ description: 'Files associated with this component' },
+					),
+				),
 			intent: schema.properties?.intent ?? optionalStringSchema(),
 		},
 	}

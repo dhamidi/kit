@@ -49,7 +49,7 @@ function uniqueFileURIs(values) {
  * }
  */
 export async function* discoverProviders({ repoRoot, cwd = process.cwd() } = {}) {
-	repoRoot ??= await findRepoRoot(cwd)
+	repoRoot ??= await discoveryRoot(cwd)
 
 	for (const directory of providerDiscoveryPaths(repoRoot, cwd)) {
 		yield Event.providerDiscovered(directory)
@@ -108,7 +108,7 @@ export async function* discoverComponentRecords({
 	cwd = process.cwd(),
 	events = false,
 } = {}) {
-	repoRoot ??= await findRepoRoot(cwd)
+	repoRoot ??= await discoveryRoot(cwd)
 
 	for (const directory of providerDiscoveryPaths(repoRoot, cwd)) {
 		if (events) {
@@ -170,5 +170,13 @@ async function exists(path) {
 		return (await stat(path)).isDirectory()
 	} catch {
 		return false
+	}
+}
+
+async function discoveryRoot(cwd) {
+	try {
+		return await findRepoRoot(cwd)
+	} catch {
+		return FileURI.fromPath(cwd)
 	}
 }
