@@ -163,24 +163,25 @@ state under `~/.cache/kit` (see REPL reference), retries a step up to 2× when a
 
 ## Kit's built-in providers (worked examples)
 
-Kit ships three providers that generate Kit's *own* building blocks — Kit uses
-them to build itself. You will rarely invoke these in an application project, but
-they are the canonical, battle-tested examples of the provider contract above.
-Study them (and imitate them) when writing providers for your own component
-families.
+The Kit checkout currently includes five providers. Four generate Kit's own
+building blocks; `kit task` is a generic manifest escape hatch for work that
+does not yet deserve a domain-specific provider. You will rarely invoke the
+self-hosting providers in an application project, but they are useful examples
+of the provider contract above.
 
 | Provider       | Type id      | Generates                              | Notable technique |
 |----------------|--------------|----------------------------------------|-------------------|
 | `kit-event`    | `event`      | `src/events/<family>.js` schema + builder, registers in `src/event.js` | idempotent `editFile` that appends to an existing family and wires imports/`Event.<name>()` |
 | `kit-provider` | `provider`   | `providers/<name>/index.js` skeleton   | multi-step plan: analyze domain → implement → verify with `bun run kit provider list` |
 | `kit-command`  | `component`  | `src/commands/<name>.js`, registers in `src/main.js` | special-cases `component show`; group vs leaf command templates |
+| `kit-agent`    | `runner`     | an `AgentRunner` subclass in `src/agent_runner.js` | ast-grep discovery and optional authentication gate |
+| `kit`          | `task`       | no deterministic files; emits a generic agent plan | escape hatch that keeps imperative work out of manifest syntax |
 
 **Read [example-provider.md](example-provider.md)** for the complete, verbatim
 `kit-command` source with annotations — it is the canonical template to imitate.
-In a Kit checkout the other two live at `providers/kit-event/index.js` and
-`providers/kit-provider/index.js`.
+In a Kit checkout the providers live under `providers/<name>/index.js`.
 
-### Discovery pattern used by all three
+### A common discovery pattern
 ```js
 async *components() {
 	for await (const path of new Glob('src/events/*.js').scan({ cwd: process.cwd() })) {

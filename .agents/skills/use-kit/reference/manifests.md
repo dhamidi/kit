@@ -146,15 +146,18 @@ method {
 ```sh
 bun run kit manifest check file.kit    # parse + resolve + full TypeBox validation, no provider run
 bun run kit manifest plan  file.kit    # dry-run env: "Would create/edit ..." + pending plan preview
-bun run kit manifest apply file.kit    # real env: writes files; plans are NOT executed
-bun run kit manifest apply file.kit --run-plans   # writes files, then runs follow-up plans
+bun run kit manifest apply file.kit    # writes files, then runs follow-up plans
+bun run kit manifest apply file.kit --skip-plans  # writes files without running plans
+bun run kit manifest apply file.kit --agent amp   # choose the plan agent
 bun run kit manifest apply - < file.kit           # stdin
 bun run kit manifest <cmd> file.kit --json        # machine-readable events/operations
 ```
 
 `ManifestRunner` refuses the **whole batch** if any operation is invalid — no
-provider touches the workspace until every form validates. `check`/`plan` use a
-dry-run env; only `apply` writes; only `apply --run-plans` runs agents.
+provider touches the workspace until every form validates. Validation uses a
+dry-run env; `plan` previews provider events without writing or running agents.
+`apply` writes and runs plans by default; `--skip-plans` applies only the
+deterministic provider effects.
 
 Manifest subcommands take no ad-hoc CLI flags for provider inputs. Anything a
 provider needs (including an output directory like `kit-provider`'s `project`

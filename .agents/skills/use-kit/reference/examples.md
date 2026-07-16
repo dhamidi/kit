@@ -1,9 +1,10 @@
 # Worked Examples
 
 Real commands and captured output from a Kit checkout, using Kit's **built-in**
-providers (`kit-command`, `kit-event`, `kit-provider`) as concrete, runnable
-examples. In your own project the provider and type names differ — they come from
-whatever providers you add — but the workflow is identical.
+providers (`kit`, `kit-agent`, `kit-command`, `kit-event`, and `kit-provider`) as
+concrete, runnable examples. In your own project the provider and type names
+differ — they come from whatever providers you add — but the workflow is
+identical.
 
 Commands here are shown as `bun run kit ...` (how Kit is invoked from a checkout);
 substitute your project's invocation, e.g. a `kit` binary on `PATH`. Absolute
@@ -17,9 +18,11 @@ bun run kit provider list
 ```
 ```
 Provider      Path
-kit-event     file:///…/providers/kit-event/index.js
 kit-provider  file:///…/providers/kit-provider/index.js
+kit-event     file:///…/providers/kit-event/index.js
+kit           file:///…/providers/kit/index.js
 kit-command   file:///…/providers/kit-command/index.js
+kit-agent     file:///…/providers/kit-agent/index.js
 ```
 ```sh
 bun run kit component list kit-event.file
@@ -86,8 +89,9 @@ const greet = defineCommand({
 
 export default greet
 ```
-The plan's `fill-in-command` step is what an LLM finishes (run with
-`manifest apply greet.kit --run-plans`, or `kit generate`'s auto-execution).
+The plan's `fill-in-command` step is what an LLM finishes. Both
+`manifest apply greet.kit` and non-dry-run `kit generate` execute emitted plans
+by default; pass `--skip-plans` to manifest apply for scaffolding only.
 
 `src/main.js` is edited to import and register the command in `createCLI([...])`.
 Afterwards `bun run kit component list | grep greet` shows
@@ -124,7 +128,7 @@ kit-provider provider {
 }
 ```
 ```sh
-bun run kit manifest apply provider.kit --run-plans
+bun run kit manifest apply provider.kit
 ```
 This writes `providers/demo-widget/index.js` from the skeleton template, then
 runs a 3-step plan: **analyze the domain → implement the provider → verify with
@@ -148,6 +152,8 @@ When writing a provider, use the same trick to learn `env`:
 ```sh
 bun run kit repl do 'env.methods().map(m => m.signature())'
 ```
+For an interactive session with completion, history, multiline input, and
+`.reload`, run `bun run kit repl --interactive`.
 
 ## 6. Manage plans
 
@@ -165,6 +171,7 @@ bun run kit plan show 2d9cf02e-…
 #      Use the configured agent to finish generated command implementation
 #      Files: file:src/commands/manifest.js
 
+bun run kit plan resume 2d9cf02e-… # resume stopped/interrupted work
 bun run kit plan clear   # drop completed cached plans
 ```
 
@@ -209,6 +216,6 @@ bun run kit plan clear   # drop completed cached plans
   It is **not** a global `generate` flag, and other providers that write to fixed
   locations (e.g. `kit-command` → `src/commands/`) don't declare it.
 
-- **Preview before writing.** `check` never runs providers; `plan` uses a dry-run
-  env (no disk writes); `apply` writes but does not run plans unless you pass
-  `--run-plans`.
+- **Preview before writing.** `check` validates without generation; `plan` uses a
+  dry-run env (no disk writes or agents); `apply` writes and runs plans by
+  default. Pass `--skip-plans` for deterministic changes only.

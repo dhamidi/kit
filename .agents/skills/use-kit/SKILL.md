@@ -22,10 +22,10 @@ Kit does not care about any specific framework. It only cares what components
 exist and how to make more of them.
 
 ```diagram
-╭──────────╮  scans cwd  ╭───────────╮  types()/components()  ╭────────────╮
+┌──────────┐  scans cwd  ┌───────────┐  types()/components()  ┌────────────┐
 │   kit    │────────────▶│ providers │───────────────────────▶│ components │
-│ (shell)  │             ╰─────┬─────╯                         ╰────────────╯
-╰────┬─────╯                   │ create(spec, env)
+│ (shell)  │             └─────┬─────┘                         └────────────┘
+└────┬─────┘                   │ create(spec, env)
      │ generate / manifest     ▼
      │                  deterministic files (env.createFile/editFile)
      ▼                         + kit.Event.plan(...) for LLM follow-up
@@ -72,12 +72,24 @@ These apply both when you *use* Kit and when you *write providers* for it.
 
 ## Common workflows
 
+### Initialize Kit in an application project
+```sh
+kit init                         # install bootstrap providers + this skill
+kit init --force                 # refresh files previously installed by Kit
+```
+`kit init` installs bootstrap providers under `.kit/providers/` and this skill
+under `.agents/skills/use-kit/` (plus `.claude/skills/use-kit/` when `.claude/`
+exists). Existing files are skipped unless `--force` is passed.
+
 ### Discover what exists in your project
 ```sh
 kit provider list                 # providers Kit found in cwd
+kit provider show <provider>[.<type>]
+kit provider test <provider>      # validate discovered component specs
 kit component list                 # every component (provider.id form)
 kit component list <prefix>        # filter by hierarchical prefix, e.g. `route`
 kit component show <id>            # details + backing files
+kit component spec <id>            # normalized schema JSON for round-tripping
 ```
 
 ### Author + apply a manifest (preferred path)
@@ -86,31 +98,39 @@ kit manifest vocabulary            # valid forms per live type, with field docs
 kit manifest vocabulary --provider <name> --json
 kit manifest check   file.kit      # validate only (no provider run)
 kit manifest plan    file.kit      # dry-run: "Would create/edit ..." + plan preview
-kit manifest apply   file.kit      # write files (plans NOT run)
-kit manifest apply   file.kit --run-plans   # write files, then run follow-up plans
+kit manifest apply   file.kit      # write files and run follow-up plans
+kit manifest apply   file.kit --skip-plans  # deterministic changes only
+kit manifest apply   file.kit --agent <name>
 kit manifest apply - < file.kit    # read manifest from stdin
 ```
-Always go `check → plan → apply`. `apply` without `--run-plans` writes the
-deterministic skeleton and prints the pending plan; add `--run-plans` to execute
-agent steps.
+Always go `check → plan → apply`. **`apply` executes follow-up plans by default.**
+Use `--skip-plans` when you only want deterministic scaffolding. `check`, `plan`,
+and `apply` also support `--json` output.
 
 ### Generate a single component
 ```sh
-kit generate <provider> <type> [--field value ...] [-n|--dry-run] [--intent "..."]
+kit generate <provider> <type>[.<instance>] [--field value ...] \
+  [--intent "..."] [--agent <name>] [--spec <path|->] [--json] [-n|--dry-run]
 ```
 `generate` is the CLI surface (positional/flag args → `type.parse`); `manifest`
 is the declarative surface. Both call the same provider `type.create(spec, env)`.
+Unlike manifest apply, a non-dry-run `generate` always executes an emitted plan.
+`--spec` reads normalized JSON before applying CLI overrides, so an existing
+component can be round-tripped with
+`kit component spec <id> | kit generate <provider> <type> --spec -`.
 
 ### Manage plans (resumable follow-up work)
 ```sh
 kit plan list      # cached plans + progress (e.g. 1/3)
 kit plan status    # currently running
 kit plan show <id> # steps, current step (→), files, verify commands
+kit plan resume <id> # resume a stopped/interrupted plan
 kit plan clear     # remove completed cached plans
 ```
 
 ### Inspect the runtime (REPL)
 ```sh
+kit repl --interactive              # interactive REPL (also: kit repl interactive)
 kit repl new                        # start a session, prints its id + welcome
 kit repl do 'kit.methods().map(m => m.signature())'
 kit repl do 'kit.method("spawn").source()'
@@ -126,7 +146,9 @@ Kit discovers when it scans the cwd. Read `reference/providers.md` for the
 contract and `reference/example-provider.md` for a complete, verbatim provider
 you can imitate. In short, a provider default-exports `provider(kit)` and returns
 an object that can `name()` itself, list `types()` and existing `components()`,
-and `create(spec, env)` new ones.
+and `create(spec, env)` new ones. A component's `inspect()` output should satisfy
+its type schema so `component spec` can feed generation. Run
+`kit provider test <name>` after changing a provider.
 
 ## References
 
@@ -159,6 +181,6 @@ Read these when the summary above is not enough:
   When a schema marks a field `cli: false` (as `kit-command` does for `name`),
   that field cannot be passed as a flag: `--name greet` is rejected with a clean
   `Unknown option '--name'.` error. Use the identifier form or a manifest.
-- **`manifest apply` writes files but does not run follow-up plans** unless you
-  pass `--run-plans`. It's easy to think generation "did nothing" when only the
-  deterministic skeleton was written and the LLM steps are still pending.
+- **`manifest apply` runs follow-up plans by default.** Use `--skip-plans` when
+  reviewing or applying only deterministic scaffolding. `manifest plan` remains
+  the no-write, no-agent preview.
