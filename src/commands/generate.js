@@ -2,7 +2,8 @@ import { defineCommand, UserError } from '../cli.js'
 import { Identifier } from '../component_identifier.js'
 import { createFileEnv } from '../file_env.js'
 import { kit } from '../index.js'
-import { schemaCLIOptionEntries, schemaHasCLIArrayField } from '../schema_args.js'
+import { providerHookError } from '../provider.js'
+import { schemaCLIOptionEntries, schemaHasCLIArrayField, schemaHasCLIBooleanField } from '../schema_args.js'
 import {
 	normalizeSchemaValue,
 	schemaViolations,
@@ -48,7 +49,7 @@ export default defineCommand({
 			throw new UserError(`Unknown provider or component type: ${providerQuery} ${target}`)
 		}
 
-		const reparsed = match.candidate.type.parse(providerArgv.slice(2))
+		const reparsed = parseComponentArgs(match.candidate, providerArgv.slice(2))
 		const rest = match.restOverride ?? match.rest
 
 		const fileSpec = specFile === undefined ? {} : await readSpecFile(specFile)
@@ -61,7 +62,14 @@ export default defineCommand({
 		if (spec.name === undefined) {
 			spec.name = rest.parts().at(-1)
 		}
-		spec.description = match.candidate.type.describe(spec)
+
+		if (spec.description === undefined) {
+			try {
+				spec.description = match.candidate.type.describe(spec)
+			} catch (error) {
+				throw providerFailure(match.candidate, 'describe', error)
+			}
+		}
 
 		if (rest.parts().length > 1) {
 			spec.parent = rest.parts()[0]
@@ -71,20 +79,166 @@ export default defineCommand({
 
 		const env = createFileEnv({ dryRun })
 
-		for await (const event of match.candidate.type.create(spec, env)) {
-			const value = event.toJSON()
-			writeEvent(value, { dryRun, json })
+		try {
+			for await (const event of match.candidate.type.create(spec, env)) {
+				const value = event.toJSON()
+				writeEvent(value, { dryRun, json })
 
-			if (value.type === 'plan') {
-				if (dryRun) {
-					continue
+				if (value.type === 'plan') {
+					if (dryRun) {
+						continue
+					}
+
+					await new kit.PlanExecutor({ agent }).execute(value)
 				}
-
-				await new kit.PlanExecutor({ agent }).execute(value)
 			}
+		} catch (error) {
+			throw providerFailure(match.candidate, 'create', error)
 		}
 	},
 })
+
+/**
+ * Parses component-type argv, using the provider's parse() when it defines one
+ * and falling back to Kit's schema-derived parser otherwise. Validates that a
+ * custom parse() returns the { values, positionals } shape kit.parseArgs
+ * produces, so a broken provider is reported instead of a misleading
+ * missing-field error downstream.
+ */
+function parseComponentArgs(candidate, argv) {
+	const { provider, type } = candidate
+
+	if (typeof type.parse !== 'function') {
+		return kit.parseArgs({
+			args: argv,
+			options: kit.parseArgsOptionsFromSchema(generateCLISchema(type.schema())),
+			strict: true,
+			allowPositionals: true,
+		})
+	}
+
+	const injected = extractInjectedArgs(argv, type.schema())
+	let parsed
+
+	try {
+		parsed = type.parse(injected.argv)
+	} catch (error) {
+		throw providerFailure(candidate, 'parse', error)
+	}
+
+	if (!isPlainObject(parsed) || !isPlainObject(parsed.values)) {
+		throw new UserError(
+			[
+				`Provider '${provider.name()}' component type '${type.id()}' returned an invalid parse() result.`,
+				'parse(argv) must return { values, positionals } like kit.parseArgs does.',
+				"Fix the provider's parse(), or delete it to use Kit's schema-derived parser.",
+			].join('\n'),
+		)
+	}
+
+	return { ...parsed, values: { ...parsed.values, ...injected.values } }
+}
+
+/**
+ * Returns the schema `kit generate` parses CLI flags against: the component
+ * type's own schema plus the Kit-injected fields every component accepts
+ * (description, files). Injected fields are grouped so help lists provider
+ * options first; `intent` stays out because generate handles --intent as a
+ * global option.
+ */
+function generateCLISchema(schema) {
+	if (schema.type !== 'object') {
+		return schema
+	}
+
+	const properties = { ...schemaWithKitFields(schema).properties }
+
+	for (const [name, property] of Object.entries(properties)) {
+		if (schema.properties?.[name] !== undefined) {
+			continue
+		}
+
+		if (name === 'intent') {
+			delete properties[name]
+			continue
+		}
+
+		properties[name] = { ...property, kit: { ...property.kit, group: 'Component metadata' } }
+	}
+
+	return { ...schema, properties }
+}
+
+/**
+ * Splits Kit-injected fields out of provider argv so component types with a
+ * custom parse() never see flags their schema does not declare, while
+ * `kit generate` still accepts --description and --files for every type.
+ * Supports `--field value`, `--field=value`, and `--field.0 value` for arrays.
+ */
+function extractInjectedArgs(argv, schema) {
+	const injected = injectedFieldSchemas(schema)
+	const values = {}
+	const rest = []
+
+	for (let index = 0; index < argv.length; index++) {
+		const match = argv[index].match(/^--([A-Za-z][\w-]*)(?:\.(\d+))?(?:=([\s\S]*))?$/)
+		const field = injected[match?.[1]]
+
+		if (field === undefined) {
+			rest.push(argv[index])
+			continue
+		}
+
+		const value = match[3] ?? argv[++index]
+
+		if (value === undefined) {
+			throw new UserError(`Option '--${match[1]} <value>' argument missing`)
+		}
+
+		if (field.type === 'array') {
+			values[match[1]] ??= []
+			values[match[1]][match[2] === undefined ? values[match[1]].length : Number(match[2])] = value
+		} else {
+			values[match[1]] = value
+		}
+	}
+
+	return { values, argv: rest }
+}
+
+function injectedFieldSchemas(schema) {
+	if (schema.type !== 'object') {
+		return {}
+	}
+
+	const injected = {}
+
+	for (const [name, property] of Object.entries(schemaWithKitFields(schema).properties)) {
+		if (schema.properties?.[name] === undefined && name !== 'intent') {
+			injected[name] = property
+		}
+	}
+
+	return injected
+}
+
+/**
+ * Converts an unexpected provider exception into a clean CLI error that names
+ * the provider hook, keeping UserError untouched and preserving the raw stack
+ * trace when KIT_DEBUG is set.
+ */
+function providerFailure(candidate, hook, error) {
+	return providerHookError({
+		providerName: candidate.provider.name(),
+		typeId: candidate.type.id(),
+		hook,
+		error,
+	})
+}
+
+function isPlainObject(value) {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 /**
  * Validates an assembled spec against the component type's TypeBox schema before
@@ -247,6 +401,8 @@ async function generateHelp(providerQuery, target) {
 			'',
 			'Generate a component using a provider.',
 			'',
+			...planLifecycleNote(),
+			'',
 			'Examples:',
 			'  kit generate <provider> <component-type> --help',
 			'  kit generate kit task.inject-secret-files --file.0 thread-actors/src/sandbox/manager.ts',
@@ -277,12 +433,9 @@ async function generateHelp(providerQuery, target) {
 			...types.map((type) => `  ${type.id().padEnd(typeWidth(types))}  ${type.description()}`),
 			'',
 			'Global options:',
-			'  --intent <text>   Extra planning context for follow-up agent work',
-			'  --agent <name>    Agent that executes the follow-up plan (default: auto)',
-			'  --spec <path|->  Read component spec JSON from a file or stdin before applying CLI overrides',
-			'  -n, --dry-run     List generated files and print the final plan without writing or executing it',
-			'  --json            Output one JSON object per event',
-			'  --help            Show help',
+			...globalOptionRows().map(([usage, description]) => `  ${usage.padEnd(globalOptionWidth())}  ${description}`),
+			'',
+			...planLifecycleNote(),
 		].join('\n')
 	}
 
@@ -296,28 +449,76 @@ async function generateHelp(providerQuery, target) {
 }
 
 function typeHelp(provider, type) {
-	const schema = type.schema()
+	const schema = generateCLISchema(type.schema())
 	const options = schemaCLIOptionEntries(schema)
-	const width = Math.max('--help'.length, ...options.map((option) => optionUsage(option).length))
+	const width = Math.max(
+		globalOptionWidth(),
+		...options.map((option) => optionUsage(option).length),
+	)
 
 	return [
 		`Usage: kit generate ${provider.name()} ${type.id()} [options]`,
 		'',
 		type.description(),
+		...optionSections(options).flatMap(({ title, entries }) => [
+			'',
+			`${title}:`,
+			...entries.map((option) => `  ${optionUsage(option).padEnd(width)}  ${option.description}`),
+		]),
 		'',
-		'Options:',
-		...options.map((option) => {
-			return `  ${optionUsage(option).padEnd(width)}  ${option.description}`
-		}),
-		`  ${'--intent <text>'.padEnd(width)}  Extra planning context for follow-up agent work`,
-		`  ${'--agent <name>'.padEnd(width)}  Agent that executes the follow-up plan (default: auto)`,
-		`  ${'--spec <path|->'.padEnd(width)}  Read component spec JSON from a file or stdin before applying CLI overrides`,
-		`  ${'-n, --dry-run'.padEnd(width)}  List generated files and print the final plan without writing or executing it`,
-		`  ${'--json'.padEnd(width)}  Output one JSON object per event`,
-		`  ${'--help'.padEnd(width)}  Show help`,
+		'Global options:',
+		...globalOptionRows().map(([usage, description]) => `  ${usage.padEnd(width)}  ${description}`),
+		'',
+		...planLifecycleNote(),
 		...schemaExamples(provider, type, schema),
 		...schemaOptionNotes(schema),
 	].join('\n')
+}
+
+/**
+ * Splits schema-derived option entries into help sections. Fields annotated
+ * with `kit: { group: 'Name' }` render under "Name options:" in first-seen
+ * order, so providers can list common options first; unannotated fields stay
+ * under "Options:".
+ */
+function optionSections(options) {
+	const sections = new Map()
+
+	for (const option of options) {
+		const title = option.group === undefined ? 'Options' : `${option.group} options`
+
+		if (!sections.has(title)) {
+			sections.set(title, { title, entries: [] })
+		}
+
+		sections.get(title).entries.push(option)
+	}
+
+	return [...sections.values()]
+}
+
+function globalOptionRows() {
+	return [
+		['--intent <text>', 'Extra planning context for follow-up agent work'],
+		['--agent <name>', 'Agent that executes the follow-up plan (default: auto)'],
+		['--spec <path|->', 'Read component spec JSON from a file or stdin before applying CLI overrides'],
+		['-n, --dry-run', 'List generated files and print the follow-up plan without writing or executing anything'],
+		['--json', 'Output one JSON object per event'],
+		['--help', 'Show help'],
+	]
+}
+
+function globalOptionWidth() {
+	return Math.max(...globalOptionRows().map(([usage]) => usage.length))
+}
+
+function planLifecycleNote() {
+	return [
+		'Plan execution:',
+		'  When a provider emits a follow-up plan, kit generate executes it immediately with',
+		'  the selected agent. With --dry-run the plan is only printed, not saved or executed.',
+		'  Use `kit plan resume` to continue a plan whose execution was interrupted.',
+	]
 }
 
 function schemaExamples(provider, type, schema) {
@@ -436,25 +637,35 @@ function shellQuote(value) {
 }
 
 function schemaOptionNotes(schema) {
-	if (!schemaHasCLIArrayField(schema)) {
-		return []
+	const notes = []
+
+	if (schemaHasCLIBooleanField(schema)) {
+		notes.push(
+			'',
+			'Boolean flags:',
+			'  Pass --flag to enable. Negate with --no-flag or --flag=false.',
+		)
 	}
 
-	return [
-		'',
-		'Array syntax:',
-		'  Use zero-based dotted indexes for specific array items: --field.0 <value>',
-		'  For arrays of objects, put the index before the object field: --field.0.name <value>',
-		'  Scalar arrays also accept repeated flags: --field <value> --field <value>',
-		'',
-		'RePL round trip:',
-		'  kit.parseSchemaArgs(schema, argv).values',
-		'  kit.argvFromSchemaValues(schema, values)',
-	]
+	if (schemaHasCLIArrayField(schema)) {
+		notes.push(
+			'',
+			'Array syntax:',
+			'  Use zero-based dotted indexes for specific array items: --field.0 <value>',
+			'  For arrays of objects, put the index before the object field: --field.0.name <value>',
+			'  Scalar arrays also accept repeated flags: --field <value> --field <value>',
+			'',
+			'RePL round trip:',
+			'  kit.parseSchemaArgs(schema, argv).values',
+			'  kit.argvFromSchemaValues(schema, values)',
+		)
+	}
+
+	return notes
 }
 
 function optionUsage(option) {
-	return `--${option.name} ${option.value}`
+	return option.value === '' ? `--${option.name}` : `--${option.name} ${option.value}`
 }
 
 function typeWidth(types) {

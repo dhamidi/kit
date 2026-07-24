@@ -64,12 +64,13 @@ A persistent Unix-socket REPL with per-session contexts (`kit` in scope; `env`
 too where relevant). `await` is supported.
 
 ```sh
-bun run kit repl --interactive # interactive session with completion/history
-bun run kit repl new          # create a session, prints id + welcome (lists available objects)
+bun run kit repl              # interactive session with completion/history
+bun run kit repl do '<code>'  # evaluate in the current session (created automatically)
 bun run kit repl ls           # list session ids
-bun run kit repl do '<code>'  # evaluate in the current session
+bun run kit repl new          # explicitly create a session, prints id + welcome (lists available objects)
 bun run kit repl transcript   # replay the current session
 bun run kit repl stop         # stop the server and remove its socket (use after editing source)
+bun run kit repl help         # subcommands, session semantics, examples
 ```
 
 Interactive mode supports multiline input, completion, persistent history, and

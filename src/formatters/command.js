@@ -1,5 +1,6 @@
 import { Identifier } from '../component_identifier.js'
 import { schemaCLIOptionEntries, schemaHasCLIArrayField } from '../schema_args.js'
+import { KeyValueFormatter } from './key_value.js'
 import { PlanFormatter } from './plan.js'
 import { TableFormatter } from './table.js'
 
@@ -52,6 +53,10 @@ export class CommandFormatter {
 			for (const [name, option] of options) {
 				lines.push(`  ${optionUsage(name, option).padEnd(width)}  ${option.description ?? ''}`)
 			}
+		}
+
+		if (command.details !== undefined) {
+			lines.push('', command.details)
 		}
 
 		return lines.join('\n')
@@ -115,8 +120,12 @@ export class CommandFormatter {
 		writeSchema(type.schema(), this.output)
 	}
 
-	async componentsList(events, { prefix } = {}) {
-		const table = new TableFormatter(['Component', 'Description'], this.output)
+	async componentsList(events, { prefix, wide = false } = {}) {
+		const table = new TableFormatter(
+			['Component', { header: 'Description', flex: true }],
+			this.output,
+			{ wide },
+		)
 		const prefixID = prefix === undefined ? undefined : Identifier.fromString(prefix)
 
 		for await (const event of events) {
@@ -145,23 +154,23 @@ export class CommandFormatter {
 		}
 	}
 
-	componentShow(componentName, record) {
-		const table = new TableFormatter(['Field', 'Value'], this.output)
+	componentShow(componentName, record, { wide = false } = {}) {
+		const details = new KeyValueFormatter(this.output, { wide })
 		const { component } = record
 		const inspect = component.inspect()
 
-		table.row(['Component', componentName])
-		table.row(['Description', component.description()])
+		details.entry('Component', componentName)
+		details.entry('Description', component.description())
 
 		if (inspect.files !== undefined) {
-			table.row(['Files', inspectFieldValue(inspect.files)])
+			details.entry('Files', inspect.files)
 		}
 
 		for (const [name, value] of Object.entries(extraInspect(inspect))) {
-			table.row([inspectFieldName(name), inspectFieldValue(value)])
+			details.entry(inspectFieldName(name), value)
 		}
 
-		table.flush()
+		details.flush()
 	}
 
 	planShow(state) {
@@ -197,18 +206,6 @@ function inspectFieldName(name) {
 	return name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (letter) => letter.toUpperCase())
 }
 
-function inspectFieldValue(value) {
-	if (Array.isArray(value)) {
-		return value.map(inspectFieldValue).join(', ')
-	}
-
-	if (value !== null && typeof value === 'object') {
-		return JSON.stringify(value)
-	}
-
-	return String(value)
-}
-
 function writeSchema(schema, output) {
 	if (schema.properties !== undefined) {
 		writeMetadata(schema, output, '')
@@ -241,7 +238,7 @@ function writeSchemaCLIOptions(schema, output) {
 }
 
 function schemaOptionUsage(entry) {
-	return `--${entry.name} ${entry.value}`
+	return entry.value === '' ? `--${entry.name}` : `--${entry.name} ${entry.value}`
 }
 
 function writeObjectFields(title, schema, output, indent) {

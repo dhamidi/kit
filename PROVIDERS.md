@@ -45,10 +45,37 @@ A provider should implement:
 - `async *components()` — existing component objects it can list/show.
 - `create(spec, env)` — delegate to the matching type for generation.
 
-Component types should implement `id()`, `description()`, `schema()`, `parse()`,
+Component types should implement `id()`, `description()`, `schema()`,
 `describe()`, and `async *create(spec, env)`. The type schema is the canonical
 component spec: Kit normalizes argv, manifest values, and JSON specs into that
 shape before validation and before calling `create()`.
+
+`parse(argv)` is optional. When a type omits it, Kit parses argv with the
+schema-derived parser (`kit.parseArgs` +
+`kit.parseArgsOptionsFromSchema(this.schema())`). Only implement `parse()` for
+custom argv behavior, and return the same `{ values, positionals }` shape
+`kit.parseArgs` produces — Kit validates the shape and reports the provider
+when it is wrong.
+
+Kit derives CLI behavior from the schema, so do not duplicate it in provider
+code:
+
+- `Type.Boolean()` fields become bare flags: `--flag` enables, `--no-flag` or
+  `--flag=false` negates.
+- `Type.Number()` / `Type.Integer()` values are coerced from CLI strings before
+  validation; unions such as `Type.Union([Type.Number(), Type.String()])`
+  prefer the number variant for numeric input. Do not coerce by hand.
+- `default:` metadata is applied when the spec is normalized and shown in
+  `--help` output. Do not repeat defaults in `description` text.
+- `kit: { group: 'Common' }` on a field places it in a named help section;
+  groups render in first-seen schema order, so put common fields first.
+- Nested object/array fields without a `description` inherit the closest
+  ancestor description in help output.
+- Kit injects `--description` and `--files` flags for every component type
+  (`kit generate ... --description 'text'` overrides the generated
+  `describe()` text). Custom `parse()` implementations never see these flags;
+  Kit extracts them before calling `parse()`. Only declare `description` or
+  `files` in a schema to customize their type or constraints.
 
 Component objects should implement `provider()`, `id()`, `description()`, and
 `inspect()`. `inspect()` should return the same canonical spec shape advertised
@@ -112,9 +139,13 @@ If the generic table/show format is noisy, the provider should own output shape:
 - `formatComponentsList(records, output)` for list output.
 - `formatComponentShow(componentName, record, output)` for detailed output.
 
-Use `kit.TableFormatter` for dense, tabular data. If table output looks wrong,
-fix `TableFormatter` rather than working around trailing padding in each
-provider.
+Use `kit.TableFormatter` for dense, tabular data. It caps output at the
+terminal width and truncates overflowing cells with `…`; pass per-column hints
+(`{ header: 'Cadence', maxWidth: 40 }`, `{ header: 'Keys', flex: true }`) or
+`{ wide: true }` to control layout. Use `kit.KeyValueFormatter` instead when
+rows carry long or list-valued cells — it renders a key/value block like
+`kit component show`. If table output looks wrong, fix `TableFormatter` rather
+than working around trailing padding in each provider.
 
 ## Code search and analysis
 

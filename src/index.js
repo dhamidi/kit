@@ -17,6 +17,7 @@ import { Event } from './event.js'
 import { createFileEnv } from './file_env.js'
 import { FileURI } from './file_uri.js'
 import { CommandFormatter } from './formatters/command.js'
+import { KeyValueFormatter } from './formatters/key_value.js'
 import { PlanFormatter } from './formatters/plan.js'
 import { TableFormatter } from './formatters/table.js'
 import { Introspectable } from './introspectable.js'
@@ -42,7 +43,9 @@ import {
 	parseSchemaArgs,
 	schemaCLIOptionEntries,
 	schemaHasCLIArrayField,
+	schemaHasCLIBooleanField,
 } from './schema_args.js'
+import { kitVersion } from './version.js'
 import {
 	normalizeSchemaValue,
 	schemaAliases,
@@ -72,6 +75,7 @@ export { Event } from './event.js'
 export { createFileEnv } from './file_env.js'
 export { FileURI } from './file_uri.js'
 export { CommandFormatter } from './formatters/command.js'
+export { KeyValueFormatter } from './formatters/key_value.js'
 export { PlanFormatter } from './formatters/plan.js'
 export { TableFormatter } from './formatters/table.js'
 export { Introspectable } from './introspectable.js'
@@ -97,7 +101,9 @@ export {
 	parseSchemaArgs,
 	schemaCLIOptionEntries,
 	schemaHasCLIArrayField,
+	schemaHasCLIBooleanField,
 } from './schema_args.js'
+export { kitVersion } from './version.js'
 export {
 	normalizeSchemaValue,
 	schemaAliases,
@@ -127,6 +133,7 @@ export const kit = {
 	Command,
 	UserError,
 	CommandFormatter,
+	KeyValueFormatter,
 	PlanFormatter,
 	TableFormatter,
 	bestMatch,
@@ -162,10 +169,12 @@ export const kit = {
 	schemaAliases,
 	schemaCLIOptionEntries,
 	schemaHasCLIArrayField,
+	schemaHasCLIBooleanField,
 	schemaViolations,
 	schemaWithKitFields,
 	shorthandTarget,
 	parseArgs,
+	kitVersion,
 	repoRoot,
 	replHistoryFile,
 	replSessionFile,
@@ -207,8 +216,9 @@ function kitDocs() {
 		Command: 'Value object for one CLI command, including options, subcommands, parsing, and execution.',
 		UserError: 'Throw this for user-facing failures. Kit prints the message without a stack trace.',
 		CommandFormatter: 'Terminal formatter for help, provider lists, component lists, component details, and plan details.',
+		KeyValueFormatter: 'Aligned key/value definition-list formatter (like kit component show output). Prefer it over TableFormatter when rows carry long or list-valued cells.',
 		PlanFormatter: 'Terminal formatter for a saved or pending follow-up plan.',
-		TableFormatter: 'Minimal aligned-column formatter for human-readable terminal tables.',
+		TableFormatter: 'Width-aware aligned-column formatter for terminal tables. Caps output at the terminal width, truncates cells with an ellipsis, and accepts per-column { header, maxWidth, flex } hints plus a { wide } escape hatch.',
 		bestMatch: 'Returns the best fuzzy-ish match for a raw query from a list of candidate strings.',
 		createCLI: 'Constructs a CLI from Command objects. Kit uses this in src/main.js.',
 		createFileEnv: 'Creates the env object passed to provider create() methods. Pass { dryRun: true } to preview writes and commands without side effects.',
@@ -239,6 +249,8 @@ function kitDocs() {
 		parseSchemaArgs: 'Parses argv against a TypeBox object schema and returns normalized values. Use with argvFromSchemaValues in the REPL to test schema/argv round trips.',
 		schemaCLIOptionEntries: 'Returns the schema-derived option rows used by kit generate help, including dotted nested field names.',
 		schemaHasCLIArrayField: 'Returns true when schema-derived CLI help should include array index syntax guidance.',
+		schemaHasCLIBooleanField: 'Returns true when schema-derived CLI help should include boolean flag guidance (--flag, --no-flag, --flag=false).',
+		kitVersion: 'Returns the Kit CLI version tag, such as v0.3.3. Backed by the package.json version field.',
 		isSchemaFieldVisibleInCLI: 'Returns whether a TypeBox schema field should be exposed as a generated kit generate CLI flag. Reads kit.cli metadata.',
 		parseArgs: 'node:util parseArgs wrapper that turns parse failures into clean UserError messages and reconstructs schema-directed dotted nested flags.',
 		repoRoot: 'Runs git rev-parse --show-toplevel and returns the repository root as a FileURI. Call .path() if an API needs a native string.',
@@ -324,7 +336,16 @@ function documentFormattingClasses() {
 		instance: {
 			row: 'Adds one row. Values are converted to strings when queued, before widths are calculated.',
 			isEmpty: 'Returns true when no data rows have been queued.',
-			flush: 'Writes headers and queued rows as an aligned text table to the output sink.',
+			flush: 'Writes headers and queued rows as an aligned text table, capped to the terminal width unless constructed with { wide: true }.',
+			columnWidths: 'Computes final column widths from natural widths, per-column maxWidth hints, the flex column, and the available terminal width.',
+			availableWidth: 'Returns the width budget: the width option, the output sink columns, process.stdout.columns, or 120.',
+		},
+	})
+	Introspectable.document(KeyValueFormatter, {
+		instance: {
+			entry: 'Queues one key/value pair. Arrays render one element per line; objects render as single-line JSON.',
+			isEmpty: 'Returns true when no entries have been queued.',
+			flush: 'Writes queued entries as an aligned key/value definition list, wrapping long values to the terminal width unless constructed with { wide: true }.',
 		},
 	})
 	Introspectable.document(PlanFormatter, {

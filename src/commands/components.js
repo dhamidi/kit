@@ -29,8 +29,12 @@ components.command(
 	defineCommand({
 		name: 'list',
 		description: 'List discovered components, optionally filtered by hierarchical prefix',
+		options: {
+			wide: { type: 'boolean', description: 'Do not truncate table cells to the terminal width' },
+		},
 		async run({ cli, parsed }) {
 			const prefix = parsed.positionals[0]
+			const wide = parsed.values.wide === true
 
 			if (prefix !== undefined && !prefix.includes('.')) {
 				const records = []
@@ -47,7 +51,7 @@ components.command(
 				}
 			}
 
-			await cli.formatter.componentsList(discoverComponents(), { prefix })
+			await cli.formatter.componentsList(discoverComponents(), { prefix, wide })
 		},
 	}),
 )
@@ -56,6 +60,9 @@ components.command(
 	defineCommand({
 		name: 'show',
 		description: 'Show component details',
+		options: {
+			wide: { type: 'boolean', description: 'Do not wrap long values to the terminal width' },
+		},
 		async run({ cli, parsed }) {
 			const componentName = parsed.positionals[0]
 
@@ -74,7 +81,7 @@ components.command(
 				return
 			}
 
-			cli.formatter.componentShow(componentName, record)
+			cli.formatter.componentShow(componentName, record, { wide: parsed.values.wide === true })
 		},
 	}),
 )

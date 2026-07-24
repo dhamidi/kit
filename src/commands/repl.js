@@ -23,11 +23,12 @@ const AsyncFunction = (async () => {}).constructor
 export default defineCommand({
 	name: 'repl',
 	description: 'Inspect Kit runtime APIs through a persistent async REPL',
+	details: replUsage(),
 	strict: false,
-	async run({ argv }) {
+	async run({ argv, cli, command: self }) {
 		const [command, ...args] = argv
 
-		if (command === '--interactive' || command === '-i') {
+		if (command === undefined || command === '--interactive' || command === '-i') {
 			return interactive(args)
 		}
 
@@ -46,11 +47,39 @@ export default defineCommand({
 				return listSessions()
 			case 'stop':
 				return stop()
+			case 'help':
+				return cli.formatter.commandHelp(self, ['repl'])
 			default:
-				throw new UserError('usage: kit repl <new|interactive|do|transcript|ls|stop> [session] [code]')
+				throw new UserError(`Unknown repl subcommand: ${command}\n\n${replUsage()}`)
 		}
 	},
 })
+
+function replUsage() {
+	return [
+		'Subcommands:',
+		'  kit repl                    Start the interactive REPL (also: interactive, -i)',
+		'  kit repl do [id] [code]     Evaluate code in a session; reads stdin when code is omitted',
+		'  kit repl new                Create a session and print the welcome message',
+		'  kit repl ls                 List sessions on the REPL server',
+		'  kit repl transcript [id]    Print a session’s input/output history',
+		'  kit repl stop               Stop the REPL server and forget its sessions',
+		'  kit repl help               Show this help',
+		'',
+		'Sessions:',
+		'  The first repl command starts a per-workspace REPL server in the background',
+		'  (it exits after 30 idle minutes). Sessions keep JavaScript state between',
+		'  `do` calls; the most recent session is remembered per workspace, and one is',
+		'  created automatically when needed. Session ids are 8 hex characters, so',
+		'  `kit repl do 3f9a41c2 ...` targets a specific session from `kit repl ls`.',
+		'',
+		'Examples:',
+		"  kit repl do 'kit.methods().map(m => m.signature())'",
+		'  kit repl do \'kit.method("spawn").source()\'',
+		"  echo 'await kit.repoRoot()' | kit repl do",
+		'  kit repl transcript',
+	].join('\n')
+}
 
 async function serve() {
 	startRepl(
@@ -77,15 +106,20 @@ async function newSession() {
 async function evalInSession(args) {
 	await ensureServer()
 	const next = [...args]
-	const id = next[0]?.length === 8 ? next.shift() : currentSession()
+	const id = looksLikeSessionID(next[0]) ? await verifiedSession(next.shift()) : await currentSessionOrNew()
 	const code = next.length === 0 ? fs.readFileSync(0, 'utf8') : next.join(' ')
+	const output = await evalCode(id, code)
 
-	return evalCode(id, code)
+	if (/^! /m.test(output)) {
+		process.exitCode = 1
+	}
+
+	return output
 }
 
 async function interactive(args) {
 	await ensureServer()
-	let id = args[0]?.length === 8 ? args[0] : await currentSessionOrNew()
+	let id = looksLikeSessionID(args[0]) ? await verifiedSession(args[0]) : await currentSessionOrNew()
 	let buffer = []
 	let closed = false
 
@@ -221,9 +255,8 @@ async function handleDotCommand(command, id, rl) {
 async function currentSessionOrNew() {
 	try {
 		const id = currentSession()
-		const sessions = await listSessions()
 
-		if (sessions.split('\n').map((session) => session.trim()).includes(id)) {
+		if (await sessionExists(id)) {
 			return id
 		}
 	} catch (error) {
@@ -236,9 +269,31 @@ async function currentSessionOrNew() {
 	return response.split('\n')[0]
 }
 
+/**
+ * Session ids are the first 8 hex characters of a UUID, so anything else on
+ * the command line is treated as code to evaluate.
+ */
+function looksLikeSessionID(value) {
+	return /^[0-9a-f]{8}$/.test(value ?? '')
+}
+
+async function verifiedSession(id) {
+	if (await sessionExists(id)) {
+		return id
+	}
+
+	throw new UserError(`No REPL session ${id} — run \`kit repl ls\` to list sessions or \`kit repl new\` to create one.`)
+}
+
+async function sessionExists(id) {
+	const sessions = await listSessions()
+	return sessions.split('\n').map((session) => session.trim()).includes(id)
+}
+
 async function transcript(args) {
 	await ensureServer()
-	return sendReplExpression(`repl.transcript(${JSON.stringify(args[0] ?? currentSession())})`)
+	const id = args[0] === undefined ? await currentSessionOrNew() : await verifiedSession(args[0])
+	return sendReplExpression(`repl.transcript(${JSON.stringify(id)})`)
 }
 
 async function listSessions() {
@@ -255,6 +310,7 @@ async function stop() {
 
 	try {
 		fs.rmSync(replSocketPath(), { force: true })
+		fs.rmSync(replSessionFile(), { force: true })
 	} catch {}
 
 	return 'Kit REPL server stopped.'

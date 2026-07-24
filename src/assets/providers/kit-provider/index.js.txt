@@ -403,9 +403,9 @@ Component type objects must implement:
 - id(): component type id
 - description(): user-facing type description
 - schema(): TypeBox schema using kit.Type
-- parse(argv): kit.parseArgs with kit.parseArgsOptionsFromSchema(this.schema())
 - describe(spec): concise generated component description
 - async *create(spec, env): calls env.createFile/editFile and yields kit.Event file/plan events
+- parse(argv) is optional: omit it to use Kit's schema-derived parser; only implement it for custom argv behavior and return { values, positionals } like kit.parseArgs
 
 Component objects must implement:
 - provider(): provider name

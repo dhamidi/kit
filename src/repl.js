@@ -235,7 +235,7 @@ function welcomeMessage(id, ctx) {
 		'  Arrays use zero-based dotted indexes, e.g. --items.0.name value',
 		'',
 		'Examples, using `kit` as a placeholder for however you invoke Kit:',
-		'  kit repl --interactive',
+		'  kit repl                     (interactive)',
 		"  kit repl do 'kit.methods().map(method => method.signature())'",
 		'  kit repl do \'kit.method("spawn").source()\'',
 		"  kit repl do 'kit.ManifestRunner.instanceMethods().map(String)'",
@@ -264,7 +264,7 @@ async function evaluate(session, code) {
 		const value = await evaluateInContext(source, session.context)
 		return { output: `${logOutput(logs)}=> ${inspect(value, { depth: 6 })}`, source }
 	} catch (error) {
-		return { output: `${logOutput(logs)}! ${error.stack ?? String(error)}`, source }
+		return { output: `${logOutput(logs)}! ${evaluationErrorText(error)}`, source }
 	} finally {
 		if (hadConsole) {
 			session.ctx.console = originalConsole
@@ -288,6 +288,17 @@ function evaluateInContext(source, context) {
 
 function usesTopLevelAwait(source) {
 	return /\bawait\b/.test(source)
+}
+
+/**
+ * Renders an evaluation error without the REPL server's own stack frames,
+ * so users see their code's failure rather than Kit internals.
+ */
+function evaluationErrorText(error) {
+	const lines = (error.stack ?? String(error)).split('\n')
+	const serverFrame = lines.findIndex((line) => /^\s+at /.test(line) && !line.includes('evalmachine'))
+
+	return (serverFrame === -1 ? lines : lines.slice(0, serverFrame)).join('\n').trimEnd()
 }
 
 function logOutput(logs) {

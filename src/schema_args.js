@@ -25,6 +25,12 @@ export function parseArgsOptionsFromSchema(schema) {
 		}
 	}
 
+	for (const name of Object.keys(options)) {
+		if (options[name].type === 'boolean' && options[`no-${name}`] === undefined) {
+			options[`no-${name}`] = { type: 'boolean' }
+		}
+	}
+
 	Object.defineProperty(options, schemaArgsMetadata, {
 		value: new SchemaArgsMetadata(schema),
 		enumerable: false,
@@ -44,13 +50,14 @@ export function parseArgsOptionsFromSchema(schema) {
 export function parseSchemaArgs(schema, argv = [], config = {}) {
 	const options = parseArgsOptionsFromSchema(schema)
 	const metadata = options[schemaArgsMetadata]
+	const args = metadata.normalizeArgs(argv)
 	let parsed
 
 	try {
 		parsed = nodeParseArgs({
 			...config,
-			args: argv,
-			options: metadata.optionsFor(argv, options),
+			args,
+			options: metadata.optionsFor(args, options),
 		})
 	} catch (error) {
 		if (typeof error?.code === 'string' && error.code.startsWith('ERR_PARSE_ARGS_')) {
@@ -125,9 +132,17 @@ export function schemaHasCLIArrayField(schema) {
 	})
 }
 
+/**
+ * Returns true when schema-derived CLI help should include boolean flag
+ * guidance (bare `--flag` plus `--no-flag` / `--flag=false` negation).
+ */
+export function schemaHasCLIBooleanField(schema) {
+	return schemaCLIOptionEntries(schema).some((entry) => entry.value === '')
+}
+
 function parseArgOption(property) {
 	const option = {
-		type: 'string',
+		type: scalarSchema(property)?.type === 'boolean' ? 'boolean' : 'string',
 	}
 
 	if (property.multiple === true || property.type === 'array') {
@@ -149,14 +164,21 @@ function scalarSchema(property) {
 	return property.type === 'array' ? property.items : property
 }
 
-function cliOptionEntries(name, schema) {
+function cliOptionEntries(name, schema, inherited = {}) {
+	const context = {
+		group: schema.kit?.group ?? inherited.group,
+		description: schema.description ?? inherited.description,
+	}
+
 	if (schema.type === 'array' && schema.items?.type === 'object') {
+		const itemContext = { ...context, description: schema.items.description ?? context.description }
+
 		return Object.entries(schema.items.properties ?? {}).flatMap(([field, property]) => {
 			if (!isSchemaFieldVisibleInCLI(property)) {
 				return []
 			}
 
-			return cliOptionEntries(`${name}.<index>.${field}`, property)
+			return cliOptionEntries(`${name}.<index>.${field}`, property, itemContext)
 		})
 	}
 
@@ -166,11 +188,36 @@ function cliOptionEntries(name, schema) {
 				return []
 			}
 
-			return cliOptionEntries(`${name}.${field}`, property)
+			return cliOptionEntries(`${name}.${field}`, property, context)
 		})
 	}
 
-	return [{ name, value: valueName(schema), description: schema.description ?? '' }]
+	return [
+		{
+			name,
+			value: valueName(schema),
+			description: optionDescription(schema, context.description),
+			group: context.group,
+		},
+	]
+}
+
+/**
+ * Builds the help description for one schema-derived option, falling back to
+ * the closest ancestor description for nested fields and appending the schema
+ * default so providers do not have to repeat defaults in description text.
+ */
+function optionDescription(schema, inheritedDescription) {
+	const description = schema.description ?? inheritedDescription ?? ''
+
+	if (schema.default === undefined) {
+		return description
+	}
+
+	const rendered = typeof schema.default === 'string' ? schema.default : JSON.stringify(schema.default)
+	const suffix = `(default: ${rendered})`
+
+	return description === '' ? suffix : `${description} ${suffix}`
 }
 
 function hasArrayField(schema) {
@@ -191,7 +238,7 @@ function valueName(schema) {
 	const scalar = scalarSchema(schema)
 
 	if (scalar.type === 'boolean') {
-		return '<boolean>'
+		return ''
 	}
 
 	if (scalar.type === 'number' || scalar.type === 'integer') {
@@ -214,30 +261,65 @@ class SchemaArgsMetadata {
 		delete next[schemaArgsMetadata]
 
 		for (const name of optionNames(args)) {
-			const field = this.fieldForOption(name)
-
-			if (field === undefined || next[name] !== undefined) {
+			if (next[name] !== undefined) {
 				continue
 			}
 
-			next[name] = parseArgOption(field.schema)
+			const field = this.fieldForOption(name)
+
+			if (field !== undefined) {
+				next[name] = parseArgOption(field.schema)
+				continue
+			}
+
+			const target = negatedOptionTarget(name)
+
+			if (target !== undefined && this.booleanField(target) !== undefined) {
+				next[name] = { type: 'boolean' }
+			}
 		}
 
 		return next
 	}
 
+	/**
+	 * Rewrites boolean `--flag=true` / `--flag=false` forms into the bare-flag and
+	 * `--no-flag` forms that node:util parseArgs accepts for boolean options.
+	 */
+	normalizeArgs(args) {
+		return (args ?? []).map((arg) => {
+			const match = /^--([^=]+)=(true|false)$/.exec(arg)
+
+			if (match === null || this.booleanField(match[1]) === undefined) {
+				return arg
+			}
+
+			return match[2] === 'true' ? `--${match[1]}` : `--no-${match[1]}`
+		})
+	}
+
 	normalizeValues(values) {
 		const normalized = { ...values }
+		const negated = []
 
 		for (const [name, value] of Object.entries(values)) {
 			const field = this.fieldForOption(name)
 
-			if (field === undefined) {
+			if (field !== undefined) {
+				delete normalized[name]
+				assignPath(normalized, field.path, coerceValue(field.schema, value))
 				continue
 			}
 
-			delete normalized[name]
-			assignPath(normalized, field.path, coerceValue(field.schema, value))
+			const target = negatedOptionTarget(name)
+
+			if (target !== undefined && this.booleanField(target) !== undefined) {
+				delete normalized[name]
+
+				if (value === true) {
+					negated.push(target)
+				}
+			}
 		}
 
 		for (const [name, schema] of Object.entries(this.schema.properties ?? {})) {
@@ -246,7 +328,32 @@ class SchemaArgsMetadata {
 			}
 		}
 
+		for (const target of negated) {
+			const field = this.fieldForOption(target)
+
+			if (field !== undefined) {
+				assignPath(normalized, field.path, false)
+				continue
+			}
+
+			normalized[this.rootField(target).name] = false
+		}
+
 		return normalized
+	}
+
+	/**
+	 * Returns the schema for a root or dotted option name when it resolves to a
+	 * boolean field, and undefined otherwise.
+	 */
+	booleanField(name) {
+		const schema = name.includes('.') ? this.fieldForOption(name)?.schema : this.rootField(name)?.schema
+
+		if (schema === undefined) {
+			return undefined
+		}
+
+		return scalarSchema(schema).type === 'boolean' ? schema : undefined
 	}
 
 	fieldForOption(name) {
@@ -371,6 +478,11 @@ function pushArgvValue(argv, path, schema, value) {
 		return
 	}
 
+	if (schema.type === 'boolean' && typeof value === 'boolean') {
+		argv.push(value ? `--${path.join('.')}` : `--no-${path.join('.')}`)
+		return
+	}
+
 	argv.push(`--${path.join('.')}`, String(value))
 }
 
@@ -469,5 +581,40 @@ function coerceValue(schema, value) {
 		return Number(value)
 	}
 
+	if (schema.anyOf !== undefined && typeof value === 'string') {
+		return coerceUnionValue(schema.anyOf, value)
+	}
+
 	return value
+}
+
+/**
+ * Coerces a CLI string into the most specific matching union variant: exact
+ * literal matches stay untouched, numeric text becomes a number when the union
+ * accepts one, and true/false become booleans when the union accepts one.
+ */
+function coerceUnionValue(variants, value) {
+	if (variants.some((variant) => variant.const === value)) {
+		return value
+	}
+
+	const types = new Set(variants.map((variant) => variant.type))
+
+	if ((types.has('number') || types.has('integer')) && isNumericText(value)) {
+		return Number(value)
+	}
+
+	if (types.has('boolean') && (value === 'true' || value === 'false')) {
+		return value === 'true'
+	}
+
+	return value
+}
+
+function isNumericText(value) {
+	return value.trim() !== '' && Number.isFinite(Number(value))
+}
+
+function negatedOptionTarget(name) {
+	return name.startsWith('no-') ? name.slice(3) : undefined
 }

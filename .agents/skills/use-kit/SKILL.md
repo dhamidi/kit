@@ -130,13 +130,13 @@ kit plan clear     # remove completed cached plans
 
 ### Inspect the runtime (REPL)
 ```sh
-kit repl --interactive              # interactive REPL (also: kit repl interactive)
-kit repl new                        # start a session, prints its id + welcome
-kit repl do 'kit.methods().map(m => m.signature())'
+kit repl                            # interactive REPL (creates a session automatically)
+kit repl do 'kit.methods().map(m => m.signature())'   # one-shot eval; auto-creates a session
 kit repl do 'kit.method("spawn").source()'
 kit repl ls                         # list sessions
 kit repl transcript                 # review current session
 kit repl stop                       # stop the server (do this after editing source)
+kit repl help                       # subcommands, session semantics, examples
 ```
 
 ## Writing your own provider

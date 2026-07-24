@@ -1,3 +1,4 @@
+import { providerHookError } from '../provider.js'
 import {
 	normalizeSchemaValue,
 	schemaViolations,
@@ -204,11 +205,21 @@ class RunnableManifestOperation extends ProviderManifestOperation {
 	}
 
 	/**
-	 * Delegates creation to the provider-owned component type.
+	 * Delegates creation to the provider-owned component type, converting
+	 * unexpected provider exceptions into clean user-facing errors.
 	 */
 	async *run(env) {
-		for await (const event of this.type.create(this.spec, env)) {
-			yield event
+		try {
+			for await (const event of this.type.create(this.spec, env)) {
+				yield event
+			}
+		} catch (error) {
+			throw providerHookError({
+				providerName: this.providerName,
+				typeId: this.typeName,
+				hook: 'create',
+				error,
+			})
 		}
 	}
 }

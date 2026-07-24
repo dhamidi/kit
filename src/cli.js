@@ -12,11 +12,13 @@ import { schemaArgsMetadata } from './schema_args.js'
  */
 export function parseArgs(config) {
 	const metadata = config.options?.[schemaArgsMetadata]
+	const args = metadata?.normalizeArgs(config.args) ?? config.args
 
 	try {
 		const parsed = nodeParseArgs({
 			...config,
-			options: metadata?.optionsFor(config.args, config.options) ?? config.options,
+			args,
+			options: metadata?.optionsFor(args, config.options) ?? config.options,
 		})
 
 		if (metadata === undefined) {
@@ -64,9 +66,10 @@ export class Command {
 	 * 	run: ({ parsed }) => `Hello, ${parsed.values.name}`,
 	 * })
 	 */
-	constructor({ name, description, options = {}, strict = true, run }) {
+	constructor({ name, description, details, options = {}, strict = true, run }) {
 		this.name = name
 		this.description = description
+		this.details = details
 		this.options = options
 		this.strict = strict
 		this.run = run
@@ -136,7 +139,7 @@ export class CLI {
 	}
 
 	async run(argv = Bun.argv.slice(2), context = {}) {
-		const [commandName, ...commandArgv] = argv
+		const [commandName, ...commandArgv] = this.resolveCommandAliases(argv)
 		const command = this.commands.get(commandName)
 
 		if (command === undefined) {
@@ -144,6 +147,21 @@ export class CLI {
 		}
 
 		return command.call(commandArgv, { ...context, cli: this })
+	}
+
+	/**
+	 * Maps conventional top-level flags to their command equivalents, so
+	 * `kit --help` and `kit --version` behave like `kit help` and `kit version`.
+	 */
+	resolveCommandAliases(argv) {
+		const aliases = { '--help': 'help', '-h': 'help', '--version': 'version', '-v': 'version' }
+		const command = aliases[argv[0]]
+
+		if (command !== undefined && this.commands.has(command)) {
+			return [command, ...argv.slice(1)]
+		}
+
+		return argv
 	}
 
 	list() {

@@ -8,6 +8,14 @@ if (!version || !/^v\d+\.\d+\.\d+/.test(version)) {
 	process.exit(1)
 }
 
+const packageVersion = `v${(await Bun.file('package.json').json()).version}`
+if (version !== packageVersion) {
+	console.error(
+		`Release version ${version} does not match package.json version ${packageVersion}. Bump package.json so kit --version reports the released version.`,
+	)
+	process.exit(1)
+}
+
 const targets = [
 	['bun-linux-x64', 'linux-x64', 'kit'],
 	['bun-linux-arm64', 'linux-arm64', 'kit'],
