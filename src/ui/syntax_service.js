@@ -1,17 +1,17 @@
 import { Parser } from 'web-tree-sitter'
-import { FileURI } from '../file_uri.js'
 import { BashLanguage } from './languages/bash_language.js'
 import { CLanguage } from './languages/c_language.js'
 import { HTMLLanguage } from './languages/html_language.js'
 import { JavaScriptLanguage } from './languages/javascript_language.js'
 import { JsonLanguage } from './languages/json_language.js'
 import { MarkdownLanguage } from './languages/markdown_language.js'
+import { PythonLanguage } from './languages/python_language.js'
 import { RustLanguage } from './languages/rust_language.js'
 import { SqlLanguage } from './languages/sql_language.js'
 import { TomlLanguage } from './languages/toml_language.js'
 import { TypeScriptLanguage } from './languages/typescript_language.js'
+import { treeSitterRuntime } from './tree_sitter_assets.js'
 
-const runtime = FileURI.fromPath(new URL('../../vendor/tree-sitter/runtime', import.meta.url))
 let runtimeInitialization
 
 /**
@@ -52,6 +52,7 @@ function defaultLanguages() {
 		new RustLanguage(),
 		new JavaScriptLanguage(),
 		new TypeScriptLanguage(),
+		new PythonLanguage(),
 		new MarkdownLanguage(),
 		new CLanguage(),
 		new BashLanguage(),
@@ -64,7 +65,7 @@ function defaultLanguages() {
 
 function initializeRuntime() {
 	runtimeInitialization ??= Parser.init({
-		locateFile: () => runtime.join('web-tree-sitter.wasm').path(),
+		locateFile: () => treeSitterRuntime,
 	})
 
 	return runtimeInitialization

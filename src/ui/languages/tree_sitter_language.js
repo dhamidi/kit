@@ -1,6 +1,6 @@
 import { Language, Query } from 'web-tree-sitter'
-import { FileURI } from '../../file_uri.js'
 import { SymbolOccurrence } from '../symbol_occurrence.js'
+import { treeSitterAssets } from '../tree_sitter_assets.js'
 
 /**
  * Loads one Tree-sitter grammar and maps conventional tag captures to Kit
@@ -10,7 +10,7 @@ export class TreeSitterLanguage {
 	constructor({ id, extensions, assetDirectory, grammar = 'parser.wasm', tags = [], highlights = [], structures = '' }) {
 		this.id = id
 		this.extensions = new Set(extensions)
-		this.assets = FileURI.fromPath(new URL(`../../../vendor/tree-sitter/${assetDirectory}`, import.meta.url))
+		this.assets = treeSitterAssets(assetDirectory)
 		this.grammarSource = grammar
 		this.tagFileSources = tags
 		this.highlightFileSources = highlights
@@ -109,7 +109,7 @@ export class TreeSitterLanguage {
 	}
 
 	async loadDefinition(grammarFile, tagFiles, highlightFiles) {
-		const grammar = await Language.load(this.assets.join(grammarFile).path())
+		const grammar = await Language.load(this.assets.grammars[grammarFile])
 		const tagSources = await this.sources(tagFiles)
 		const highlightSources = await this.sources(highlightFiles)
 		if (this.structureSource !== '') tagSources.push(this.structureSource)
@@ -122,7 +122,7 @@ export class TreeSitterLanguage {
 	}
 
 	async sources(files) {
-		return Promise.all(files.map((name) => Bun.file(this.assets.join('queries', name).path()).text()))
+		return files.map((name) => this.assets.queries[name])
 	}
 }
 

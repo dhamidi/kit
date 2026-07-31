@@ -10,6 +10,7 @@ const parsingCases = [
 	['JSX', '.jsx', 'export function Card({ title }) { return <h1>{title}</h1> }', 'javascript', [['function', 'Card']]],
 	['TypeScript', '.ts', 'interface Store { get(id: string): string }\nconst count: number = 1', 'typescript', [['interface', 'Store'], ['method', 'get'], ['constant', 'count']]],
 	['TSX', '.tsx', 'const View = ({ name }: { name: string }) => <div>{name}</div>', 'typescript', [['function', 'View']]],
+	['Python', '.py', 'VERSION = "1"\nclass Greeter:\n    def greet(self):\n        return "hello"\n\ndef build():\n    return Greeter()', 'python', [['constant', 'VERSION'], ['class', 'Greeter'], ['method', 'greet'], ['function', 'build']]],
 	['Markdown', '.md', '# Intro\nSome **bold** text.', 'markdown', [['heading', 'Intro']]],
 	['C', '.c', 'struct User { int id; };\nint main(void) { return 0; }', 'c', [['class', 'User'], ['field', 'id'], ['function', 'main']]],
 	['Bash', '.sh', 'greet() { echo "hello $1"; }', 'bash', [['function', 'greet']]],
@@ -82,6 +83,26 @@ describe('SyntaxService', () => {
 		expect(method.containerName).toBe('User')
 		expect(method.signature).toBe('fn greet(&self) -> String')
 		expect(source.slice(method.contentStartByte, method.contentEndByte)).toBe('        self.name.clone()')
+	})
+
+	test('records Python methods and nested functions with dedented editable suites', async () => {
+		const source = '# café 😀\nclass Greeter:\n    @classmethod\n    def greet(cls, name: str = "world") -> str:\n        prefix = "Hi"\n        return f"{prefix} {name}"\n\ndef outer():\n    def nested():\n        return "nested"\n    return nested()\n'
+		const document = await service.analyze({ source, extension: '.py' })
+		const methods = document.symbols.filter(({ role, kind, name }) => role === 'definition' && kind === 'method' && name === 'greet')
+		const duplicateFunctions = document.symbols.filter(({ role, kind, name }) => role === 'definition' && kind === 'function' && name === 'greet')
+		const method = methods[0]
+		const nested = definition(document, 'function', 'nested')
+		const bytes = Buffer.from(source)
+
+		expect(methods).toHaveLength(1)
+		expect(duplicateFunctions).toHaveLength(0)
+		expect(method.containerName).toBe('Greeter')
+		expect(method.signature).toBe('def greet(cls, name: str = "world") -> str:')
+		expect(bytes.subarray(method.contentStartByte, method.contentEndByte).toString()).toBe('        prefix = "Hi"\n        return f"{prefix} {name}"')
+		expect(method.contentIndent).toBe('        ')
+		expect(nested.containerName).toBe('outer')
+		expect(nested.signature).toBe('def nested():')
+		expect(nested.contentIndent).toBe('        ')
 	})
 
 	test('gives a C prototype no editable content range', async () => {

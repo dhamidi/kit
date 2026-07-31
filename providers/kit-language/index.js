@@ -3,6 +3,7 @@ import { Language, Parser } from 'web-tree-sitter'
 
 const adapterGlob = 'src/ui/languages/*_language.js'
 const manifestPath = 'vendor/tree-sitter/manifest.json'
+const assetCatalogPath = 'src/ui/tree_sitter_assets.js'
 let parserDefinition
 
 /** Exposes Tree-sitter language adapters as Kit components. */
@@ -127,8 +128,8 @@ class KitLanguageType {
 			[
 				{
 					id: 'vendor-language-assets',
-					instructions: `Vendor ${spec.package}@${spec.version} grammar, query, license, checksum, and commit metadata without using floating versions`,
-					files: [manifestPath, 'package.json', 'bun.lock', `vendor/tree-sitter/${spec.name}`],
+					instructions: `Vendor and statically embed ${spec.package}@${spec.version} grammar, query, license, checksum, and commit metadata without using floating versions`,
+					files: [manifestPath, assetCatalogPath, 'package.json', 'bun.lock', `vendor/tree-sitter/${spec.name}`],
 					agent: { prompt: vendorPrompt(spec) },
 				},
 				{
@@ -252,7 +253,7 @@ function languageFiles(kit, name, adapterPath, language) {
 	const vendor = workspace.join('vendor', 'tree-sitter')
 	const assets = vendor.join(name)
 	const relative = (file) => file.relativeTo(workspace)
-	const files = [adapterPath, manifestPath, relative(assets.join('LICENSE'))]
+	const files = [adapterPath, assetCatalogPath, manifestPath, relative(assets.join('LICENSE'))]
 	if (language.grammar !== undefined) files.push(relative(vendor.join(language.grammar)))
 	if (language.grammars !== undefined) files.push(...Object.keys(language.grammars).map((grammar) => relative(vendor.join(grammar))))
 	files.push(...Object.keys(language.queries ?? {}).map((query) => relative(assets.join('queries', query))))
@@ -298,7 +299,7 @@ function variantExpression(fallback, mappings) {
 }
 
 function vendorPrompt(spec) {
-	return `Add exact dependency ${spec.package}@${spec.version}. Copy its WASM grammar, selected query files, and license into vendor/tree-sitter/${spec.name}. Record source commit metadata and SHA-256 checksums in ${manifestPath}. Never use a regex parser or a floating package version.`
+	return `Add exact dependency ${spec.package}@${spec.version}. Copy its WASM grammar, selected query files, and license into vendor/tree-sitter/${spec.name}. Record source commit metadata and SHA-256 checksums in ${manifestPath}. Add static file imports for every grammar and static text imports for every selected query to ${assetCatalogPath}, then register them under the ${spec.name} asset directory so standalone compiled Kit binaries embed them. Never use a regex parser or a floating package version.`
 }
 
 function semanticsPrompt(spec, path) {

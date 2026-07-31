@@ -139,6 +139,19 @@
 			"queries": {
 				"highlights.scm": "2fb5c61d33a70389312254c9c392e2c5dd6313d958d6e5f8f74cadd5e0811707"
 			}
+		},
+		"python": {
+			"package": "tree-sitter-python",
+			"version": "0.25.0",
+			"commit": "293fdc02038ee2bf0e2e206711b69c90ac0d413f",
+			"commitDate": "2025-09-11T06:45:00Z",
+			"extensions": [".py", ".pyi"],
+			"grammar": "python/parser.wasm",
+			"grammarSha256": "16108b50df4ee9a30168794252ab55e7c93bfc5765d7fa0aa3e335752c515f47",
+			"queries": {
+				"highlights.scm": "a6708f209381618e2b398972c8f1ccd892f0c064eab35a2a3f911c3e22e79a7e",
+				"tags.scm": "d0f3e577878167bfabc30e526e497bce58d1699b9bcabf8ab3a50698efb5ca3e"
+			}
 		}
 	}
 }

@@ -2,6 +2,7 @@ import { watch } from 'node:fs'
 import { basename } from 'node:path'
 import React from 'react'
 import { renderToReadableStream } from 'react-dom/server'
+import datastar from '../assets/datastar-1.0.2.js' with { type: 'text' }
 import { CodebaseBrowser } from './codebase_browser.js'
 import {
 	Browser,
@@ -13,9 +14,7 @@ import {
 	LiveStatus,
 } from './components.jsx'
 import { KitBrowser } from './kit_browser.js'
-
-const uiStyles = Bun.file(new URL('./ui.css', import.meta.url))
-const datastar = Bun.file(new URL('../assets/datastar-1.0.2.js', import.meta.url))
+import uiStyles from './ui.css' with { type: 'text' }
 
 /**
  * Starts the Bun HTTP server that hosts Kit's codebase browser.

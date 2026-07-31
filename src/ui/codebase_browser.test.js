@@ -67,6 +67,25 @@ describe('CodebaseBrowser symbol previews and editing', () => {
 		expect(reparsed.source.selectedText).toBe('const message = name.toUpperCase()\nreturn message')
 	})
 
+	test('selects only a Python suite, dedents it, and preserves indentation when editing', async () => {
+		const source = 'class Greeter:\n    def greet(self, name):\n        message = f"Hi {name}"\n        return message\n'
+		const fixture = await fixtureFile('sample.py', source)
+		const browser = new CodebaseBrowser(FileURI.fromPath(fixture.root), { allowWrites: true })
+		const selected = await selectDefinition(browser, fixture.name, 'greet')
+
+		expect(selected.source.selection.kind).toBe('method')
+		expect(selected.source.selection.signature).toBe('def greet(self, name):')
+		expect(selected.source.selectedText).toBe('message = f"Hi {name}"\nreturn message')
+		expect(selected.source.startLine).toBe(3)
+		await browser.editSource({
+			relativePath: fixture.name,
+			expectedHash: selected.source.contentHash,
+			symbolKey: selected.source.selection.selectionKey(),
+			replacement: 'message = name.upper()\nreturn message',
+		})
+		expect(await readFile(fixture.path, 'utf8')).toBe('class Greeter:\n    def greet(self, name):\n        message = name.upper()\n        return message\n')
+	})
+
 	test('selects and edits a Bash non-braced function body', async () => {
 		const source = 'greet() if true; then\n  echo "hello"\nfi\n'
 		const fixture = await fixtureFile('script.sh', source)

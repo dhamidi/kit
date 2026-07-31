@@ -1,4 +1,5 @@
 import React from 'react'
+import { Icon, iconForComponentType, iconForSymbol } from './lucide_icons.jsx'
 
 const h = React.createElement
 
@@ -12,7 +13,7 @@ export function KitDocument({ model, rootName }) {
 			h('meta', { name: 'viewport', content: 'width=device-width, initial-scale=1' }),
 			h('meta', { name: 'color-scheme', content: 'dark light' }),
 			h('title', null, `${rootName} · Kit Browser`),
-			h('link', { rel: 'stylesheet', href: '/assets/ui.css?v=5' }),
+			h('link', { rel: 'stylesheet', href: '/assets/ui.css?v=6' }),
 		),
 		h('body', { 'data-init': "@get('/events')" },
 			h('header', { className: 'masthead' },
@@ -38,7 +39,7 @@ export function Document({ model }) {
 			h('meta', { name: 'viewport', content: 'width=device-width, initial-scale=1' }),
 			h('meta', { name: 'color-scheme', content: 'dark light' }),
 			h('title', null, `${model.rootName} · Kit Browser`),
-			h('link', { rel: 'stylesheet', href: '/assets/ui.css?v=5' }),
+			h('link', { rel: 'stylesheet', href: '/assets/ui.css?v=6' }),
 		),
 		h('body', { 'data-init': "@get('/events')" },
 			h('header', { className: 'masthead' },
@@ -59,13 +60,13 @@ export function KitBrowser({ model }) {
 				h('span', null, 'Kit'),
 				model.selectedProvider === undefined ? null : h('span', null, model.selectedProvider),
 			),
-			h('span', { className: 'result-count' }, `${model.providers.length} providers`),
 		),
 		h('div', { className: 'columns kit-columns' },
 			h(Pane, { title: 'Providers', count: model.providers.length },
 				...model.providers.map((provider) => h(Action, {
 					key: provider.name,
 					label: provider.name,
+					icon: 'package',
 					selected: provider.name === model.selectedProvider,
 					action: kitAction({ provider: provider.name }),
 				})),
@@ -74,8 +75,8 @@ export function KitBrowser({ model }) {
 				...model.types.map((type) => h(Action, {
 					key: type.id,
 					label: type.id,
-					meta: 'create',
-					selected: model.selection?.kind === 'type' && model.selection.title === type.id,
+					icon: iconForComponentType(type.id),
+					selected: model.selectedType === type.id,
 					action: kitAction({ provider: model.selectedProvider, type: type.id }),
 				})),
 			),
@@ -83,8 +84,9 @@ export function KitBrowser({ model }) {
 				...model.components.map((component) => h(Action, {
 					key: component.id,
 					label: component.id,
+					icon: iconForComponentType(component.type),
 					selected: model.selection?.kind === 'component' && model.selection.title === component.id,
-					action: kitAction({ provider: model.selectedProvider, component: component.id }),
+					action: kitAction({ provider: model.selectedProvider, type: model.selectedType, component: component.id }),
 				})),
 			),
 			h(Inspector, { selection: model.selection, allowWrites: model.allowWrites }),
@@ -117,20 +119,19 @@ export function Browser({ model }) {
 			),
 			h('div', { className: 'context-actions' },
 				h('a', { className: 'back-to-kit', href: '/' }, '← Components'),
-				h('span', { className: 'result-count' }, `${model.folders.length} folders · ${model.files.length} files`),
 			),
 		),
 		h('div', { className: 'columns' },
 			h(Pane, { title: 'Folders', count: model.folders.length },
 				model.parent === undefined ? null : h(Action, {
-					label: '··',
-					meta: 'parent',
+					label: '..',
+					icon: 'folder',
 					action: browseAction({ dir: model.parent, query: model.query }),
 				}),
 				...model.folders.map((folder) => h(Action, {
 					key: folder.path,
 					label: folder.name,
-					meta: 'folder',
+					icon: 'folder',
 					action: browseAction({ dir: folder.path, query: model.query }),
 				})),
 			),
@@ -138,6 +139,7 @@ export function Browser({ model }) {
 				...model.files.map((file) => h(Action, {
 					key: file.path,
 					label: file.name,
+					icon: 'file',
 					selected: file.path === model.selectedFile,
 					action: browseAction({ dir: model.directory, file: file.path, query: model.query }),
 				})),
@@ -146,7 +148,8 @@ export function Browser({ model }) {
 				...model.symbols.map((symbol) => h(Action, {
 					key: symbol.key,
 					label: symbol.label,
-					meta: symbol.meta,
+					icon: iconForSymbol(symbol.kind),
+					meta: `L${symbol.line}`,
 					nested: symbol.nested,
 					selected: symbol.selected,
 					action: browseAction({
@@ -188,8 +191,8 @@ function Brand(rootName) {
 function Inspector({ selection, allowWrites }) {
 	return h('section', { className: 'inspector' },
 		h('header', null,
-			h('div', null,
-				h('small', null, selection?.kind ?? 'Inspector'),
+			h('div', { className: 'inspector-title' },
+				h(Icon, { name: iconForSelection(selection) }),
 				h('h1', null, selection?.title ?? 'Choose a structure'),
 			),
 		),
@@ -329,13 +332,22 @@ function Pane({ title, count, children }) {
 	)
 }
 
-function Action({ label, meta, action, selected = false, nested = false }) {
+function Action({ label, icon, meta, action, selected = false, nested = false }) {
 	return h('button', {
 		type: 'button',
 		className: ['item', selected ? 'selected' : undefined, nested ? 'nested' : undefined].filter(Boolean).join(' '),
 		'data-on:click': action,
 		'data-indicator': 'browsing',
-	}, h('span', null, nested ? h('i', { 'aria-hidden': 'true' }, '↳') : null, label), meta === undefined ? null : h('small', null, meta))
+	}, h('span', { className: 'item-identity' },
+		icon === undefined ? null : h(Icon, { name: icon }),
+		h('span', null, label),
+	), meta === undefined ? null : h('small', null, meta))
+}
+
+function iconForSelection(selection) {
+	if (selection?.kind === 'provider') return 'package'
+	if (selection?.kind === 'type' || selection?.kind === 'component') return iconForComponentType(selection.type ?? selection.title)
+	return 'component'
 }
 
 function SourcePane({ model }) {

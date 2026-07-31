@@ -43,7 +43,8 @@ export class SymbolOccurrence {
 			selected: this.matchesSelection(selectedKey),
 			nested: this.isNested(),
 			label: this.signature ?? this.name,
-			meta: `${this.kind} · L${this.startLine ?? this.line}`,
+			kind: this.kind,
+			line: this.startLine ?? this.line,
 		}
 	}
 }

@@ -20,16 +20,24 @@ export class KitBrowser {
 		const selectedProviderName = searchParams.get('provider') ?? providers[0]?.name
 		const selectedProvider = providers.find((entry) => entry.name === selectedProviderName)
 		const types = selectedProvider === undefined ? [] : await this.catalog.types(selectedProvider.provider)
-		const components = selectedProvider === undefined ? [] : await this.catalog.components(selectedProvider.provider)
+		const providerComponents = selectedProvider === undefined ? [] : await this.catalog.components(selectedProvider.provider)
 		const selectedType = types.find((entry) => entry.id === searchParams.get('type'))
+		const components = selectedType === undefined
+			? providerComponents
+			: providerComponents.filter((entry) => this.catalog.componentType(entry.component, types)?.id === selectedType.id)
 		const selectedComponent = components.find((entry) => entry.id === searchParams.get('component'))
 
 		return {
 			allowWrites: this.allowWrites,
 			providers: providers.map(({ name }) => ({ name })),
 			selectedProvider: selectedProvider?.name,
+			selectedType: selectedType?.id,
 			types: types.map(({ id, description }) => ({ id, description })),
-			components: components.map(({ id, description }) => ({ id, description })),
+			components: components.map(({ id, description, component }) => ({
+				id,
+				description,
+				type: this.catalog.componentType(component, types)?.id,
+			})),
 			selection: selectedComponent === undefined
 				? selectedType === undefined
 					? providerSelection(selectedProvider, types, components)
@@ -46,6 +54,7 @@ export class KitBrowser {
 		return {
 			kind: 'component',
 			title: selectedComponent.id,
+			type: type?.id,
 			description: selectedComponent.description,
 			provider: provider.name,
 			properties,
@@ -116,6 +125,7 @@ async function typeSelection(provider, selectedType) {
 	return {
 		kind: 'type',
 		title: selectedType.id,
+		type: selectedType.id,
 		description: selectedType.description,
 		provider: provider.name,
 		form: await ComponentForm.create(schema),
