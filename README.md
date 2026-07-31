@@ -44,6 +44,33 @@ This installs Kit's bootstrap providers (`kit-provider` and `kit-agent`) under
 `.agents/skills/use-kit`. If the project already has a `.claude/` directory, Kit
 also installs the same skill under `.claude/skills/use-kit`.
 
+### Codebase browser prototype
+
+Start the server-rendered Kit browser in the current repository:
+
+```sh
+kit ui
+```
+
+The primary view browses discovered providers, component types, component
+instances, inspected properties, and schema-derived creation forms. Forms are
+preview-only by default; pass `--allow-writes` to enable deterministic provider
+generation. Follow-up agent plans are reported but are not run from the UI.
+
+The source-files view keeps the original folder, file, symbol, and source
+browser. Pass a different directory as the positional argument, or choose
+another address with `--hostname` and `--port`. The UI uses React 19.2.7 only on
+the server to render HTML streams. Datastar 1.0.2, vendored under `src/assets`,
+applies streamed HTML updates in the browser and reports filesystem changes in
+real time. Normalized definitions and references are indexed in an in-memory
+`bun:sqlite` database; parser adapters replace each file's occurrences
+atomically without creating a persistent index file. The JavaScript proof of
+concept has grown into a Tree-sitter-only adapter architecture for Rust,
+JavaScript and JSX, TypeScript and TSX, Markdown, C, Bash, and HTML. Unsupported
+languages remain readable as plain text but do not use heuristic symbol
+matching. The runtime, grammars, queries, source commits, exact package versions,
+and checksums are recorded in `vendor/tree-sitter/manifest.json`.
+
 For kit to be useful, ask your favorite agent to run kit help and build a provider 
 for a component you care about:
 

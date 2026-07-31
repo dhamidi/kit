@@ -1,0 +1,24 @@
+{
+  "name": "@tsgw/markdown",
+  "version": "0.2.3",
+  "description": "markdown grammar for tree-sitter",
+  "author": "MDeiml (https://github.com/MDeiml)",
+  "license": "MIT",
+  "keywords": [
+    "grammar",
+    "tree-sitter",
+    "markdown"
+  ],
+  "files": [
+    "tree-sitter-markdown.wasm"
+  ],
+  "exports": {
+    ".": "./tree-sitter-markdown.wasm",
+    "./tree-sitter-markdown.wasm": "./tree-sitter-markdown.wasm"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:stereobooster/tree-sitter-grammar-wasm.git",
+    "directory": "packages/markdown"
+  }
+}

@@ -8,6 +8,7 @@ import manifest from './commands/manifest.js'
 import plan from './commands/plan.js'
 import provider from './commands/provider.js'
 import repl from './commands/repl.js'
+import ui from './commands/ui.js'
 import version from './commands/version.js'
 
 /**
@@ -17,9 +18,19 @@ import version from './commands/version.js'
  * await main(['help'])
  */
 export async function main(argv = Bun.argv.slice(2)) {
-	const result = await createCLI([help, version, init, components, provider, agent, generate, plan, repl, manifest]).run(
-		argv.length === 0 ? ['help'] : argv,
-	)
+	const result = await createCLI([
+		help,
+		version,
+		init,
+		components,
+		provider,
+		agent,
+		generate,
+		plan,
+		repl,
+		manifest,
+		ui,
+	]).run(argv.length === 0 ? ['help'] : argv)
 
 	if (typeof result === 'string') {
 		console.log(result)

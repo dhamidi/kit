@@ -8,9 +8,22 @@
 		"kit": "bun src/main.js"
 	},
 	"devDependencies": {
-		"@types/bun": "latest"
+		"@tsgw/markdown": "0.2.3",
+		"@types/bun": "1.3.14",
+		"tree-sitter-bash": "0.25.1",
+		"tree-sitter-c": "0.24.1",
+		"tree-sitter-html": "0.23.2",
+		"tree-sitter-javascript": "0.25.0",
+		"tree-sitter-json": "0.24.8",
+		"tree-sitter-rust": "0.24.0",
+		"tree-sitter-typescript": "0.23.2"
 	},
 	"dependencies": {
-		"@sinclair/typebox": "^0.34.49"
+		"@derekstride/tree-sitter-sql": "0.3.11",
+		"@sinclair/typebox": "0.34.49",
+		"@tree-sitter-grammars/tree-sitter-toml": "0.7.0",
+		"react": "19.2.7",
+		"react-dom": "19.2.7",
+		"web-tree-sitter": "0.26.11"
 	}
 }
