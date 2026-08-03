@@ -51,15 +51,17 @@ These apply both when you *use* Kit and when you *write providers* for it.
 3. **Generation is deterministic first, LLM second.** A provider's `create()`
    writes the ~80% skeleton deterministically, then yields ONE
    `kit.Event.plan(...)` for the remaining work. Keep those phases separate.
-4. **Never write files or spawn generation side effects directly in a
-   provider.** Call `env.createFile()` / `env.editFile()` and `yield` the event
-   they return. Use `env.spawn()` / `env.exec()` inside `create()` so dry-run
-   mode can skip side effects; use `env.dryRun` when generation logic must
-   branch.
+4. **Every effect has one Kit-owned boundary.** During discovery, use
+   `kit.cwd()`, `kit.pathExists()`, `kit.glob()`, `kit.readFile()`,
+   `kit.readFileBytes()`, `kit.readJSON()`, `kit.importModule()`, and
+   `kit.spawn()`. Inside `create()`, use `env.createFile()` /
+   `env.editFile()` / `env.readFile()` / `env.pathExists()` and `env.spawn()` /
+   `env.exec()` so dry-run mode remains effective. Do not use
+   `node:fs`, `Bun.file`, `Bun.write`, `Bun.spawn`, or direct dynamic imports in
+   provider code.
 5. **Use Kit value objects, not string ops.** `kit.FileURI` for paths,
-   `kit.Identifier` for hierarchical ids, `kit.spawn()` for read-only discovery
-   subprocesses, `kit.Type` (TypeBox) for schemas. Never splice paths or split
-   ids by hand.
+   `kit.Identifier` for hierarchical ids, and `kit.Type` (TypeBox) for schemas.
+   Never splice paths or split ids by hand.
 6. **Schemas are the source of truth.** Help text, manifest vocabulary, and CLI
    options are all generated from `type.schema()` descriptions/examples. Put a
    human-readable `description` on every schema field. Don't duplicate

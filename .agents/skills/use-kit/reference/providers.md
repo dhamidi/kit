@@ -56,7 +56,7 @@ class MyType {
 	describe(spec) { return spec.name }      // concise description of a specific instance
 
 	async *create(spec, env) {               // manifest/apply surface
-		const path = this.kit.FileURI.fromPath('src/x.js').path()
+		const path = this.kit.FileURI.fromPath('src/x.js')
 		yield await env.createFile(path, template(spec))
 		if (spec.intent !== undefined) {
 			yield this.kit.Event.plan(`Implement ${spec.name}`, [{
@@ -84,14 +84,15 @@ one code path, two surfaces.
 
 ## Rules (from PROVIDERS.md + AGENTS.md)
 
-- **Use only the injected `kit` object + standard Bun APIs.** Do not import Kit
-  internals from provider code. Inspect unfamiliar APIs dynamically:
+- **Use the injected `kit` object for discovery effects.** Use `kit.cwd()`,
+  `kit.pathExists()`, `kit.glob()`, `kit.readFile()`, `kit.readFileBytes()`,
+  `kit.readJSON()`, `kit.importModule()`, and `kit.spawn()`. Do not use `node:fs`, `Bun.file`,
+  `Bun.write`, `Bun.spawn`, or direct dynamic imports in provider code. Do not
+  import Kit internals. Inspect unfamiliar APIs dynamically:
   `kit.methods()`, `kit.method(name).signature()`, `kit.method(name).source()`,
   `env.methods()`, `env.method(name).parameterNames()`.
 - **Values, not strings:** `kit.FileURI` for paths, `kit.Identifier` for ids,
-  `env.spawn()` for generation-time subprocesses, `kit.spawn()` for read-only
-  discovery subprocesses that should always run, `kit.Type` for schemas with
-  `description`.
+  and `kit.Type` for schemas with `description`.
 - **Deterministic first, plan second.** Emit files deterministically; add ONE
   `kit.Event.plan(...)` for the LLM remainder. Keep plan wording specific to the
   generated component, not copied from another provider.
@@ -128,6 +129,7 @@ It is introspectable and exposes:
 - `editFile(path, edit)` → reads the file, applies `edit(source) => nextSource`
   (a function) or leaves it unchanged, writes it, returns a `file.edited` event.
 - `readFile(path)` → reads a file through Kit's `FileURI` path handling.
+- `pathExists(path)` → checks whether a generation file or directory exists.
 - `spawn(command, options)` → streams command events; dry-run yields
   `command.spawned` / successful `command.exited` without running the command.
 - `exec(command, options)` → returns `{ code, stdout, stderr, events }`; use it
@@ -184,11 +186,34 @@ In a Kit checkout the providers live under `providers/<name>/index.js`.
 ### A common discovery pattern
 ```js
 async *components() {
-	for await (const path of new Glob('src/events/*.js').scan({ cwd: process.cwd() })) {
-		const module = await import(this.kit.FileURI.fromPath(path).toString())
+	const workspace = await this.kit.repoRoot()
+
+	for await (const file of this.kit.glob('src/events/*.js', { cwd: workspace })) {
+		const module = await this.kit.importModule(file)
+		const path = file.relativeTo(workspace)
 		// read exported schemas / default command / etc. and yield component objects
 	}
 }
 ```
 `kit-event` reads exported `*Schemas`; `kit-command` reads the default-exported
 command and its `.commands`; `kit-provider` derives the name from the directory.
+
+The distinction is deliberate: `kit.*` discovery methods always perform their
+read-only effects, while `env.*` generation methods can simulate writes and
+commands during `kit generate -n` and `kit manifest plan`. Do not pass `kit`
+methods into `create()` as a shortcut around `env`.
+
+If the required effect is missing, extend Kit's `kit` or `env` boundary and add
+runtime documentation so `method(name).doc()` explains it. Do not hide direct
+I/O behind a provider-local helper.
+
+### Effect-boundary review
+
+Before running the provider test, scan the provider for common bypasses:
+
+```sh
+rg -n "node:fs|Bun\.(file|write|spawn)|new Glob|await import\(" providers/<name>/index.js
+```
+
+The expected result is empty. Then run `kit provider test <name>` and exercise
+both `kit component list <name>` and a dry-run generation or manifest plan.

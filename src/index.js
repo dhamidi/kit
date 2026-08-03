@@ -1,5 +1,6 @@
 import { Type } from '@sinclair/typebox'
 import { Glob } from 'bun'
+import { stat } from 'node:fs/promises'
 import {
 	AgentRunner,
 	AmpAgentRunner,
@@ -183,8 +184,10 @@ export const kit = {
 	replStateDirectory,
 	startRepl,
 	loadProvider,
+	cwd,
 	glob,
 	importModule,
+	pathExists,
 	readFile,
 	readFileBytes,
 	readJSON,
@@ -197,6 +200,16 @@ Introspectable.includeInObject(kit)
 export async function loadProvider(path) {
 	const module = await importModule(path)
 	return module.default(kit)
+}
+
+/**
+ * Returns the current working directory as a FileURI.
+ *
+ * @example
+ * const workspace = kit.cwd()
+ */
+export function cwd() {
+	return FileURI.fromPath(process.cwd())
 }
 
 /**
@@ -221,6 +234,22 @@ export async function* glob(pattern, { cwd = process.cwd() } = {}) {
  */
 export function importModule(path) {
 	return import(FileURI.fromPath(path).toString())
+}
+
+/**
+ * Returns whether a file or directory exists through Kit's file boundary.
+ *
+ * @example
+ * if (await kit.pathExists('src')) console.log('source directory found')
+ */
+export async function pathExists(path) {
+	try {
+		await stat(FileURI.fromPath(path).path())
+		return true
+	} catch (error) {
+		if (error.code === 'ENOENT') return false
+		throw error
+	}
 }
 
 /**
@@ -320,8 +349,10 @@ function kitDocs() {
 		replStateDirectory: 'Returns the cache directory where Kit stores REPL sockets/sessions and plan state.',
 		startRepl: 'Starts the Unix-socket REPL server. CLI users normally call kit repl new/do/stop instead.',
 		loadProvider: 'Imports a provider module from a path/FileURI and calls its default export with the kit object.',
+		cwd: 'Returns the current working directory as a FileURI. Use it when provider discovery must distinguish the invocation directory from the repository root.',
 		glob: 'Yields FileURI values matching a Bun glob below the supplied cwd. Providers should use this for read-only file discovery.',
 		importModule: 'Dynamically imports one JavaScript module from a path or FileURI. Providers should use this instead of importing discovered path strings directly.',
+		pathExists: 'Returns whether a file or directory exists. Accepts a native path or FileURI.',
 		readFile: 'Reads one UTF-8 text file from a path or FileURI. Generation-time reads should use env.readFile so dry-run execution stays observable.',
 		readFileBytes: 'Reads one file into a Uint8Array. Use this for binary discovery assets such as WebAssembly modules.',
 		readJSON: 'Reads and parses one JSON file from a path or FileURI.',

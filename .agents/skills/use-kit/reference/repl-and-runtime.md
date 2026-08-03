@@ -154,6 +154,33 @@ internals that should always execute. Inside provider `create()` methods, prefer
 `env.spawn()` / `env.exec()` so `kit generate -n` and `kit manifest plan` can
 report the command without running it.
 
+### Discovery I/O through `kit`
+Providers perform read-only discovery through the injected runtime object. This
+keeps filesystem and module-loading capabilities explicit and makes provider
+code portable when Kit is available only as a compiled binary.
+
+```js
+const invocationDirectory = kit.cwd()
+const workspace = await kit.repoRoot(invocationDirectory.path())
+if (!(await kit.pathExists(workspace.join('src')))) return
+const manifest = await kit.readJSON(workspace.join('manifest.json'))
+const source = await kit.readFile(workspace.join('src', 'index.js'))
+const wasm = await kit.readFileBytes(workspace.join('parser.wasm'))
+
+for await (const file of kit.glob('src/**/*.js', { cwd: workspace })) {
+	const module = await kit.importModule(file)
+}
+```
+
+These methods accept native paths or `FileURI` values; `kit.glob()` yields
+`FileURI` values. Do not replace them with `node:fs`, `Bun.file`, `Bun.write`,
+`Bun.spawn`, or `import(file.toString())` in provider code. Standard JavaScript
+and Bun APIs that only manipulate in-memory values are fine.
+
+Use `kit.spawn()` only for read-only discovery commands that must always run.
+Once execution enters `create(spec, env)`, use `env` for reads, writes, and
+commands so dry-run behavior remains correct.
+
 ### `env` — generation environment
 `env` is passed to provider `create(spec, env)` methods. It is introspectable,
 has a `dryRun` boolean, and exposes:
@@ -163,6 +190,7 @@ env.dryRun                         // true for generate -n / manifest plan
 await env.createFile(path, source) // returns file.created; no write in dry-run
 await env.editFile(path, edit)     // returns file.edited; no write in dry-run
 await env.readFile(path)           // generation read through FileURI handling
+await env.pathExists(path)         // generation existence check through FileURI handling
 for await (const event of env.spawn(['cmd'])) yield event
 const result = await env.exec(['cmd']) // { code, stdout, stderr, events }
 ```

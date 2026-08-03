@@ -87,8 +87,9 @@ by the matching type schema so `kit component spec <component> | kit generate
 
 - Use `kit.FileURI` for paths. Do not splice paths with string operations.
 - Use `kit.Identifier` for hierarchical ids. Do not split ids on `.` by hand.
-- Use `kit.glob()`, `kit.readFile()`, `kit.readFileBytes()`, `kit.readJSON()`,
-  and `kit.importModule()` for read-only discovery I/O.
+- Use `kit.cwd()`, `kit.pathExists()`, `kit.glob()`, `kit.readFile()`,
+  `kit.readFileBytes()`, `kit.readJSON()`, and `kit.importModule()` for
+  read-only discovery I/O.
 - Use `env.spawn()` / `env.exec()` for generation-time commands so dry-run mode
   can report the command without running it. Use `kit.spawn()` only for
   read-only discovery commands that should run outside `create()` dry-run
@@ -99,6 +100,19 @@ by the matching type schema so `kit component spec <component> | kit generate
   alternate field names, `kit.shorthandFor` maps scalar object shorthands to a
   nested field, and root `kit.oneOfRequired` declares cross-field identity
   requirements.
+
+### Effect ownership
+
+| Provider phase | Use | Do not use |
+| --- | --- | --- |
+| Discovery (`components()`) | `kit.cwd`, `kit.pathExists`, `kit.glob`, `kit.readFile`, `kit.readFileBytes`, `kit.readJSON`, `kit.importModule`, `kit.spawn` | `node:fs`, `Bun.file`, `Bun.spawn`, direct dynamic imports |
+| Generation (`create()`) | `env.createFile`, `env.editFile`, `env.readFile`, `env.pathExists`, `env.spawn`, `env.exec` | direct writes or commands, and `kit` methods that bypass dry-run behavior |
+| In-memory transformation | standard JavaScript and Bun value APIs | one-off I/O wrappers that hide effects from Kit |
+
+If a provider needs an effect that neither `kit` nor `env` can express, extend
+the appropriate Kit boundary and document it through `Introspectable`. Do not
+add a provider-local wrapper around a direct side effect; that only hides the
+boundary violation.
 
 ## Generation and events
 
@@ -169,6 +183,16 @@ Use structural tools for source-code structure.
 - Keep `component list` and `component show` fast enough to run in the foreground.
 - Run `bun run kit provider test <name>` while developing a provider. Success is
   quiet; failures print every component spec/schema violation and exit non-zero.
+
+Before considering a provider complete, check that it does not bypass Kit's
+effect boundaries:
+
+```sh
+rg -n "node:fs|Bun\.(file|write|spawn)|new Glob|await import\(" providers/<name>/index.js
+```
+
+The expected result is empty. Static imports of domain libraries are fine; the
+check targets runtime I/O and module loading.
 
 ## Output modes
 

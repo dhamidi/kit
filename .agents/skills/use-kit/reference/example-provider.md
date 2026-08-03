@@ -12,10 +12,10 @@ Study it as the canonical example of the provider contract described in
   existing components; `KitCommandType` owns generation; `KitCommandComponent`
   models one discovered command. See [providers.md](providers.md) for the
   contract each must satisfy.
-- **Discovery by scanning `cwd`.** `components()` globs `src/commands/*.js`,
-  imports each module, and derives ids/descriptions from the default-exported
-  command and its subcommands — descriptions come from the *source object*, not
-  hardcoded fallbacks.
+- **Discovery through Kit.** `components()` uses `kit.glob()` and
+  `kit.importModule()` to inspect `src/commands/*.js`, then derives
+  ids/descriptions from the default-exported command and its subcommands —
+  descriptions come from the *source object*, not hardcoded fallbacks.
 - **Schema is the source of truth.** `schema()` is a TypeBox object with
   `description`, `examples`, `pattern`, and `kit: { cli: false }` annotations. Help text,
   manifest vocabulary, and CLI options are all generated from it.
@@ -43,8 +43,6 @@ Study it as the canonical example of the provider contract described in
 ## Source: `providers/kit-command/index.js`
 
 ```js
-import { Glob } from 'bun'
-
 class KitCommandProvider {
 	constructor(kit) {
 		this.kit = kit
@@ -59,8 +57,11 @@ class KitCommandProvider {
 	}
 
 	async *components() {
-		for await (const path of new Glob('src/commands/*.js').scan({ cwd: process.cwd() })) {
-			const module = await import(this.kit.FileURI.fromPath(path).toString())
+		const workspace = await this.kit.repoRoot()
+
+		for await (const file of this.kit.glob('src/commands/*.js', { cwd: workspace })) {
+			const module = await this.kit.importModule(file)
+			const path = file.relativeTo(workspace)
 			const command = module.default
 
 			yield new KitCommandComponent({

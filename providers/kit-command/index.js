@@ -1,5 +1,3 @@
-import { Glob } from 'bun'
-
 class KitCommandProvider {
 	constructor(kit) {
 		this.kit = kit
@@ -14,8 +12,11 @@ class KitCommandProvider {
 	}
 
 	async *components() {
-		for await (const path of new Glob('src/commands/*.js').scan({ cwd: process.cwd() })) {
-			const module = await import(this.kit.FileURI.fromPath(path).toString())
+		const workspace = await this.kit.repoRoot()
+
+		for await (const file of this.kit.glob('src/commands/*.js', { cwd: workspace })) {
+			const module = await this.kit.importModule(file)
+			const path = file.relativeTo(workspace)
 			const command = module.default
 
 			yield new KitCommandComponent({

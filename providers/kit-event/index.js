@@ -1,5 +1,3 @@
-import { Glob } from 'bun'
-
 class KitEventProvider {
 	constructor(kit) {
 		this.kit = kit
@@ -14,8 +12,11 @@ class KitEventProvider {
 	}
 
 	async *components() {
-		for await (const path of new Glob('src/events/*.js').scan({ cwd: process.cwd() })) {
-			const module = await import(this.kit.FileURI.fromPath(path).toString())
+		const workspace = await this.kit.repoRoot()
+
+		for await (const file of this.kit.glob('src/events/*.js', { cwd: workspace })) {
+			const module = await this.kit.importModule(file)
+			const path = file.relativeTo(workspace)
 			const family = path.replace(/^src\/events\//, '').replace(/\.js$/, '')
 
 			for (const [name, schema] of Object.entries(schemasFrom(module))) {
@@ -71,7 +72,7 @@ class KitEventType {
 
 	async *create(spec, env) {
 		const path = `src/events/${spec.family}.js`
-		const exists = await Bun.file(path).exists()
+		const exists = await env.pathExists(path)
 
 		if (exists) {
 			yield await env.editFile(path, (source) => addEventToFamily(source, spec))

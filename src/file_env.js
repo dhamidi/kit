@@ -1,6 +1,7 @@
 import { Event } from './event.js'
 import { FileURI } from './file_uri.js'
 import { Introspectable } from './introspectable.js'
+import { stat } from 'node:fs/promises'
 import { spawn as runCommand } from './spawn.js'
 
 /**
@@ -41,6 +42,16 @@ export function createFileEnv({ dryRun = false } = {}) {
 
 		async readFile(path) {
 			return Bun.file(FileURI.fromPath(path).path()).text()
+		},
+
+		async pathExists(path) {
+			try {
+				await stat(FileURI.fromPath(path).path())
+				return true
+			} catch (error) {
+				if (error.code === 'ENOENT') return false
+				throw error
+			}
 		},
 
 		async *spawn(command, options = {}) {
@@ -98,7 +109,11 @@ export function createFileEnv({ dryRun = false } = {}) {
 		].join('\n'),
 		readFile: [
 			'Reads a text file through Kit FileURI path handling.',
-			'Use this for generation-time reads when provider logic needs current source content; discovery outside create() may still use normal Bun APIs.',
+			'Use this for generation-time reads when provider logic needs current source content; discovery outside create() should use kit.readFile().',
+		].join('\n'),
+		pathExists: [
+			'Returns whether a file or directory exists during generation.',
+			'Use this instead of direct filesystem access when create() must choose between createFile() and editFile().',
 		].join('\n'),
 		spawn: [
 			'Runs a generation-time command as command.* events, or simulates it during dry-run.',

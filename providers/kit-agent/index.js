@@ -39,7 +39,7 @@ class KitAgentProvider {
 	}
 
 	async *components() {
-		if (!(await Bun.file(AGENT_RUNNER_FILE).exists())) {
+		if (!(await this.kit.pathExists(AGENT_RUNNER_FILE))) {
 			return
 		}
 

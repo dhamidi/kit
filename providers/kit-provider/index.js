@@ -1,6 +1,3 @@
-import { Glob } from 'bun'
-import { stat } from 'node:fs/promises'
-
 /**
  * KitProviderProvider manages Kit provider modules under providers/<name>/index.js.
  */
@@ -19,14 +16,15 @@ class KitProviderProvider {
 
 	async *components() {
 		const root = await discoveryRoot(this.kit)
+		const cwd = this.kit.cwd()
 
-		for (const directory of this.kit.providerDiscoveryPaths(root, process.cwd())) {
-			if (!(await exists(directory))) {
+		for (const directory of this.kit.providerDiscoveryPaths(root, cwd)) {
+			if (!(await this.kit.pathExists(directory))) {
 				continue
 			}
 
-			for await (const path of new Glob('*/index.js').scan({ cwd: directory.path() })) {
-				yield new KitProviderComponent({ path: directory.join(path).path(), kit: this.kit })
+			for await (const file of this.kit.glob('*/index.js', { cwd: directory })) {
+				yield new KitProviderComponent({ path: file.path(), kit: this.kit })
 			}
 		}
 	}
@@ -166,7 +164,7 @@ class KitProviderComponent {
 		return {
 			name: this.id(),
 			description: this.description(),
-			project: providerProject(file, this.kit.FileURI.fromPath(process.cwd())),
+			project: providerProject(file, this.kit.cwd()),
 			files: [this.path],
 		}
 	}
@@ -306,15 +304,15 @@ class ${className(spec.name)}Type {
 		//
 		// Rules:
 		// - spec already matches schema(); do not re-parse argv or manifests here.
-		// - Write through env.createFile/env.editFile so dry-run and manifests stay
-		//   observable. Do not call Bun.write for generated files.
+		// - Read and write through env so dry-run and manifests stay observable.
+		//   Use env.pathExists when choosing between createFile and editFile.
 		// - Use this.kit.FileURI for paths. Avoid string-splicing paths.
 		// - Yield every env event.
 		// - If spec.intent is present, yield one this.kit.Event.plan(...) for the
 		//   LLM follow-up work after deterministic files exist.
 		//
 		// Example:
-		// const file = this.kit.FileURI.fromPath('src').join(spec.name + '.js').path()
+		// const file = this.kit.FileURI.fromPath('src').join(spec.name.concat('.js'))
 		// yield await env.createFile(file, sourceFor(spec))
 		// if (spec.intent !== undefined) {
 		//   yield this.kit.Event.plan('Implement ' + spec.name, [{
@@ -390,9 +388,10 @@ Finish the generated ${spec.name} provider in ${path}.
 Start by reading the AGENT INSTRUCTIONS and AGENT TODO comments in that file;
 they are intentionally written as an implementation checklist for a small model.
 Use the injected kit runtime object; do not import Kit internals from provider code.
-Perform discovery I/O through kit.glob(), kit.readFile(), kit.readFileBytes(),
-kit.readJSON(), kit.importModule(), and kit.spawn(). Perform generation writes
-and commands through env so dry-run mode remains effective.
+Perform discovery I/O through kit.cwd(), kit.pathExists(), kit.glob(),
+kit.readFile(), kit.readFileBytes(), kit.readJSON(), kit.importModule(), and
+kit.spawn(). Perform generation reads, writes, existence checks, and commands
+through env so dry-run mode remains effective.
 Inspect unfamiliar APIs dynamically with kit.methods(), kit.method(name).signature(),
 kit.method(name).source(), env.methods(), and env.method(name).parameterNames().
 If you need to inspect the Kit API outside provider execution, use bun run kit repl.
@@ -432,15 +431,7 @@ async function discoveryRoot(kit) {
 	try {
 		return await kit.repoRoot()
 	} catch {
-		return kit.FileURI.fromPath(process.cwd())
-	}
-}
-
-async function exists(file) {
-	try {
-		return (await stat(file.path())).isDirectory()
-	} catch {
-		return false
+		return kit.cwd()
 	}
 }
 
