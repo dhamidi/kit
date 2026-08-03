@@ -6,8 +6,9 @@ structured events/plans without leaking framework details into Kit core.
 
 ## Provider shape
 
-Default-export `provider(kit)` and use only the injected `kit` object plus
-standard Bun APIs.
+Default-export `provider(kit)` and perform I/O through the injected `kit`
+object. Standard JavaScript and Bun value APIs are fine, but providers should
+not reach around Kit for filesystem, module-loading, or process side effects.
 
 The injected `kit` object is dynamically introspectable. Agents should inspect
 the runtime API instead of importing Kit internals or guessing helper shapes:
@@ -86,6 +87,8 @@ by the matching type schema so `kit component spec <component> | kit generate
 
 - Use `kit.FileURI` for paths. Do not splice paths with string operations.
 - Use `kit.Identifier` for hierarchical ids. Do not split ids on `.` by hand.
+- Use `kit.glob()`, `kit.readFile()`, `kit.readFileBytes()`, `kit.readJSON()`,
+  and `kit.importModule()` for read-only discovery I/O.
 - Use `env.spawn()` / `env.exec()` for generation-time commands so dry-run mode
   can report the command without running it. Use `kit.spawn()` only for
   read-only discovery commands that should run outside `create()` dry-run

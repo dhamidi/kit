@@ -1,10 +1,10 @@
-import { Glob } from 'bun'
 import { Language, Parser } from 'web-tree-sitter'
 
 const adapterGlob = 'src/ui/languages/*_language.js'
 const manifestPath = 'vendor/tree-sitter/manifest.json'
 const assetCatalogPath = 'src/ui/tree_sitter_assets.js'
-let parserDefinition
+let parserRuntimeDefinition
+const javascriptGrammarDefinitions = new Map()
 
 /** Exposes Tree-sitter language adapters as Kit components. */
 class KitLanguageProvider {
@@ -21,14 +21,16 @@ class KitLanguageProvider {
 	}
 
 	async *components() {
-		const manifest = await Bun.file(manifestPath).json()
+		const workspace = await this.kit.repoRoot()
+		const manifest = await this.kit.readJSON(workspace.join(manifestPath))
 
-		for await (const path of new Glob(adapterGlob).scan({ cwd: process.cwd() })) {
+		for await (const file of this.kit.glob(adapterGlob, { cwd: workspace })) {
+			const path = file.relativeTo(workspace)
 			if (path.endsWith('/tree_sitter_language.js')) continue
-			const analysis = await analyzeAdapter(this.kit, path)
+			const analysis = await analyzeAdapter(this.kit, workspace, file)
 			const language = manifest.languages[analysis.adapter.id]
 			if (language === undefined) continue
-			yield new KitLanguageComponent({ analysis, language, path, kit: this.kit })
+			yield new KitLanguageComponent({ analysis, language, path, kit: this.kit, workspace })
 		}
 	}
 
@@ -120,7 +122,7 @@ class KitLanguageType {
 	}
 
 	async *create(spec, env) {
-		const root = this.kit.FileURI.fromPath(process.cwd())
+		const root = await this.kit.repoRoot()
 		const file = root.join('src', 'ui', 'languages', `${fileStem(spec.name)}_language.js`)
 		yield await env.createFile(file, adapterSource(spec))
 		yield this.kit.Event.plan(
@@ -152,11 +154,12 @@ class KitLanguageType {
 
 /** One existing language adapter and its exact vendored grammar metadata. */
 class KitLanguageComponent {
-	constructor({ analysis, language, path, kit }) {
+	constructor({ analysis, language, path, kit, workspace }) {
 		this.analysis = analysis
 		this.language = language
 		this.path = path
 		this.kit = kit
+		this.workspace = workspace
 	}
 
 	provider() {
@@ -198,21 +201,21 @@ class KitLanguageComponent {
 			grammarVariants,
 			highlightVariants,
 			semantics: this.analysis.semantics.length === 0 ? undefined : this.analysis.semantics,
-			files: languageFiles(this.kit, adapter.id, this.path, this.language),
+			files: languageFiles(this.kit, this.workspace, adapter.id, this.path, this.language),
 		})
 	}
 }
 
-async function analyzeAdapter(kit, path) {
-	const source = await Bun.file(path).text()
-	const tree = await parseJavaScript(kit, source)
+async function analyzeAdapter(kit, workspace, file) {
+	const source = await kit.readFile(file)
+	const tree = await parseJavaScript(kit, workspace, source)
 	try {
 		const declaration = descendants(tree.rootNode, 'class_declaration')[0]
 		const className = declaration?.childForFieldName('name')?.text
 		const methods = declaration === undefined ? [] : descendants(declaration, 'method_definition')
 			.map((method) => method.childForFieldName('name')?.text)
 			.filter((name) => name !== undefined && !['constructor', 'grammarFor', 'highlightFilesFor', 'tagFilesFor'].includes(name))
-		const module = await import(kit.FileURI.fromPath(path).toString())
+		const module = await kit.importModule(file)
 		const Adapter = Object.values(module).find((value) => typeof value === 'function' && value.name === className)
 		const adapter = new Adapter()
 		const parentName = Object.getPrototypeOf(Adapter.prototype).constructor.name
@@ -226,15 +229,21 @@ async function analyzeAdapter(kit, path) {
 	}
 }
 
-async function parseJavaScript(kit, source) {
-	if (parserDefinition === undefined) {
-		parserDefinition = (async () => {
-			const root = kit.FileURI.fromPath(process.cwd())
-			await Parser.init({ locateFile: () => root.join('vendor', 'tree-sitter', 'runtime', 'web-tree-sitter.wasm').path() })
-			return Language.load(root.join('vendor', 'tree-sitter', 'javascript', 'parser.wasm').path())
-		})()
+async function parseJavaScript(kit, workspace, source) {
+	parserRuntimeDefinition ??= kit.readFileBytes(
+		workspace.join('vendor', 'tree-sitter', 'runtime', 'web-tree-sitter.wasm'),
+	).then((wasmBinary) => Parser.init({ wasmBinary }))
+	await parserRuntimeDefinition
+
+	const grammarKey = workspace.toString()
+	if (!javascriptGrammarDefinitions.has(grammarKey)) {
+		javascriptGrammarDefinitions.set(
+			grammarKey,
+			kit.readFileBytes(workspace.join('vendor', 'tree-sitter', 'javascript', 'parser.wasm'))
+				.then((bytes) => Language.load(bytes)),
+		)
 	}
-	const language = await parserDefinition
+	const language = await javascriptGrammarDefinitions.get(grammarKey)
 	const parser = new Parser()
 	parser.setLanguage(language)
 	const tree = parser.parse(Buffer.from(source).toString('latin1'))
@@ -248,8 +257,7 @@ function descendants(node, type) {
 	return matches
 }
 
-function languageFiles(kit, name, adapterPath, language) {
-	const workspace = kit.FileURI.fromPath(process.cwd())
+function languageFiles(kit, workspace, name, adapterPath, language) {
 	const vendor = workspace.join('vendor', 'tree-sitter')
 	const assets = vendor.join(name)
 	const relative = (file) => file.relativeTo(workspace)

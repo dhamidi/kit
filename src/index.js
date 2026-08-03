@@ -1,4 +1,5 @@
 import { Type } from '@sinclair/typebox'
+import { Glob } from 'bun'
 import {
 	AgentRunner,
 	AmpAgentRunner,
@@ -182,6 +183,11 @@ export const kit = {
 	replStateDirectory,
 	startRepl,
 	loadProvider,
+	glob,
+	importModule,
+	readFile,
+	readFileBytes,
+	readJSON,
 	spawn,
 }
 
@@ -189,8 +195,62 @@ documentRuntimeAPI()
 Introspectable.includeInObject(kit)
 
 export async function loadProvider(path) {
-	const module = await import(FileURI.fromPath(path).toString())
+	const module = await importModule(path)
 	return module.default(kit)
+}
+
+/**
+ * Yields FileURI values matching a glob below one directory.
+ *
+ * @example
+ * for await (const file of kit.glob('src/*.js')) console.log(file.toString())
+ */
+export async function* glob(pattern, { cwd = process.cwd() } = {}) {
+	const directory = FileURI.fromPath(cwd)
+
+	for await (const path of new Glob(pattern).scan({ cwd: directory.path(), absolute: true })) {
+		yield FileURI.fromPath(path)
+	}
+}
+
+/**
+ * Imports one JavaScript module through Kit's file boundary.
+ *
+ * @example
+ * const module = await kit.importModule(kit.FileURI.fromPath('src/main.js'))
+ */
+export function importModule(path) {
+	return import(FileURI.fromPath(path).toString())
+}
+
+/**
+ * Reads one UTF-8 text file through Kit's file boundary.
+ *
+ * @example
+ * const source = await kit.readFile('package.json')
+ */
+export function readFile(path) {
+	return Bun.file(FileURI.fromPath(path).path()).text()
+}
+
+/**
+ * Reads one file as bytes through Kit's file boundary.
+ *
+ * @example
+ * const wasm = await kit.readFileBytes('parser.wasm')
+ */
+export async function readFileBytes(path) {
+	return new Uint8Array(await Bun.file(FileURI.fromPath(path).path()).arrayBuffer())
+}
+
+/**
+ * Reads and parses one JSON file through Kit's file boundary.
+ *
+ * @example
+ * const manifest = await kit.readJSON('package.json')
+ */
+export async function readJSON(path) {
+	return JSON.parse(await readFile(path))
 }
 
 function documentRuntimeAPI() {
@@ -260,6 +320,11 @@ function kitDocs() {
 		replStateDirectory: 'Returns the cache directory where Kit stores REPL sockets/sessions and plan state.',
 		startRepl: 'Starts the Unix-socket REPL server. CLI users normally call kit repl new/do/stop instead.',
 		loadProvider: 'Imports a provider module from a path/FileURI and calls its default export with the kit object.',
+		glob: 'Yields FileURI values matching a Bun glob below the supplied cwd. Providers should use this for read-only file discovery.',
+		importModule: 'Dynamically imports one JavaScript module from a path or FileURI. Providers should use this instead of importing discovered path strings directly.',
+		readFile: 'Reads one UTF-8 text file from a path or FileURI. Generation-time reads should use env.readFile so dry-run execution stays observable.',
+		readFileBytes: 'Reads one file into a Uint8Array. Use this for binary discovery assets such as WebAssembly modules.',
+		readJSON: 'Reads and parses one JSON file from a path or FileURI.',
 		spawn: 'Low-level command event stream that always runs. Use env.spawn() instead for generation side effects that must no-op in dry-run.',
 	}
 }

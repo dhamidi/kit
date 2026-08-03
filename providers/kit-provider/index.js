@@ -189,8 +189,8 @@ function providerTemplate(spec) {
  * ${spec.name} provider exposes ${spec.description} components to Kit.
  *
  * AGENT INSTRUCTIONS:
- * - Keep this file self-contained. Use only the injected kit object, standard
- *   Bun APIs, and small local helper functions.
+ * - Keep this file self-contained. Use the injected kit object for I/O and
+ *   side effects; use standard JavaScript and small local helpers for values.
  * - Do not import Kit internals from src/. The same provider may run in another
  *   project where Kit is available only as a binary.
  * - Implement the TODOs from top to bottom: schema first, discovery second,
@@ -220,8 +220,8 @@ class ${className(spec.name)}Provider {
 		//
 		// Recipe:
 		// 1. Find the source files/directories that define real ${spec.name} components.
-		//    Prefer Bun Glob, Bun.file(), kit.spawn(['ast-grep', ...]), or direct
-		//    dynamic inspection when the project has a runtime registry.
+		//    Prefer this.kit.glob(), this.kit.readFile(), this.kit.importModule(),
+		//    or this.kit.spawn(['ast-grep', ...]) for read-only discovery.
 		// 2. Derive each component's id, description, and canonical spec from the
 		//    source object being modeled. Do not hardcode fallback descriptions when
 		//    the source already contains a name, label, route, command, table, etc.
@@ -229,11 +229,11 @@ class ${className(spec.name)}Provider {
 		// 4. Ensure component.inspect() conforms to ${className(spec.name)}Type.schema().
 		//
 		// Example shape:
-		// for await (const path of new Glob('src/**/*.js').scan({ cwd: process.cwd() })) {
+		// for await (const file of this.kit.glob('src/**/*.js')) {
 		//   yield new ${className(spec.name)}Component({
-		//     name: this.kit.FileURI.fromPath(path).withoutExtension('.js').relativeTo(this.kit.FileURI.fromPath('src')),
+		//     name: file.withoutExtension('.js').relativeTo(this.kit.FileURI.fromPath('src')),
 		//     description: 'Describe the source object, not the file path',
-		//     files: [path],
+		//     files: [file],
 		//   })
 		// }
 	}
@@ -390,6 +390,9 @@ Finish the generated ${spec.name} provider in ${path}.
 Start by reading the AGENT INSTRUCTIONS and AGENT TODO comments in that file;
 they are intentionally written as an implementation checklist for a small model.
 Use the injected kit runtime object; do not import Kit internals from provider code.
+Perform discovery I/O through kit.glob(), kit.readFile(), kit.readFileBytes(),
+kit.readJSON(), kit.importModule(), and kit.spawn(). Perform generation writes
+and commands through env so dry-run mode remains effective.
 Inspect unfamiliar APIs dynamically with kit.methods(), kit.method(name).signature(),
 kit.method(name).source(), env.methods(), and env.method(name).parameterNames().
 If you need to inspect the Kit API outside provider execution, use bun run kit repl.
